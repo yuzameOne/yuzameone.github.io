@@ -85,9 +85,25 @@
       border-top: 1px solid #eee;
       background-color: #f8fafc;
     }
+    .auth-error {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 20px;
+    }
   </style>
 </head>
-<body class="bg-gray-50 p-4">
+<body>
+  <div id="authErrorContainer" class="auth-error hidden">
+    <div class="max-w-md p-6 bg-white rounded-lg shadow-md">
+      <h2 class="text-2xl font-bold text-red-600 mb-4">Ошибка доступа</h2>
+      <p id="authErrorMessage" class="mb-4"></p>
+      <p class="text-sm text-gray-500">Обратитесь к администратору</p>
+    </div>
+  </div>
+
   <div id="appContainer" class="hidden">
     <div class="max-w-md mx-auto bg-white rounded-lg shadow-md overflow-hidden">
       <div class="bg-blue-500 text-white py-3 px-4 flex justify-between items-center">
@@ -208,15 +224,6 @@
     </div>
   </div>
 
-  <div id="loadingContainer" class="flex items-center justify-center min-h-screen">
-    <div class="text-center">
-      <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status">
-        <span class="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]">Загрузка...</span>
-      </div>
-      <p class="mt-4">Инициализация приложения...</p>
-    </div>
-  </div>
-
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-app.js";
     import { 
@@ -228,10 +235,10 @@
       doc, 
       query, 
       where, 
-      onSnapshot,
-      setDoc
+      onSnapshot
     } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
 
+    // Конфигурация Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyAPX_GlZVyQN7KwFY-MdtJBE_VyJGsfGPc",
       authDomain: "payment-calendar-5e433.firebaseapp.com",
@@ -242,9 +249,17 @@
       measurementId: "G-6B7DT74CWE"
     };
 
+    // Инициализация Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    // Список разрешенных User ID
+    const ALLOWED_USER_IDS = [
+      "564940168", // Замените на реальные ID пользователей
+      "579486395"
+    ];
+
+    // Глобальные переменные
     let currentDate = new Date();
     let currentMonth = currentDate.getMonth();
     let currentYear = currentDate.getFullYear();
@@ -258,39 +273,38 @@
       'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
     ];
 
-    // Инициализация Telegram Web App
-    const tg = window.Telegram.WebApp;
-    
-    tg.expand(); // Развернуть приложение на весь экран
+    // Функции аутентификации
+    function checkAuth() {
+      try {
+        const tg = window.Telegram.WebApp;
+        
+        if (!tg.initDataUnsafe?.user?.id) {
+          showAuthError("Не удалось получить данные пользователя");
+          return false;
+        }
 
-    // Получаем данные пользователя Telegram
-    const user = tg.initDataUnsafe.user;
-    const telegramId = user.id.toString();
+        const userId = tg.initDataUnsafe.user.id.toString();
+        
+        if (!ALLOWED_USER_IDS.includes(userId)) {
+          showAuthError("Доступ запрещен");
+          return false;
+        }
 
-    // Проверяем пользователя в Firestore
-    const usersRef = collection(db, "users");
-    const q = query(usersRef, where("telegramId", "==", telegramId));
-    const querySnapshot = await getDocs(q);
-
-    if (querySnapshot.empty) {
-      // Создаем нового пользователя
-      await setDoc(doc(db, "users", `tg_${telegramId}`), {
-        telegramId: telegramId,
-        firstName: user.first_name,
-        lastName: user.last_name || '',
-        username: user.username || '',
-        createdAt: new Date()
-      });
+        currentUserId = userId;
+        return true;
+      } catch (error) {
+        showAuthError("Ошибка авторизации");
+        return false;
+      }
     }
 
-    // Устанавливаем текущего пользователя
-    currentUserId = telegramId;
-    document.getElementById('loadingContainer').classList.add('hidden');
-    document.getElementById('appContainer').classList.remove('hidden');
+    function showAuthError(message) {
+      document.getElementById('authErrorMessage').textContent = message;
+      document.getElementById('authErrorContainer').classList.remove('hidden');
+      document.getElementById('appContainer').classList.add('hidden');
+    }
 
-    // Инициализируем календарь
-    initCalendar();
-
+    // Функции календаря
     function formatDate(date) {
       const d = new Date(date);
       let month = '' + (d.getMonth() + 1);
@@ -323,7 +337,6 @@
     }
 
     function initCalendar() {
-      // Подписываемся на обновления платежей для текущего пользователя
       const paymentsRef = collection(db, "payments");
       const q = query(paymentsRef, where("userId", "==", currentUserId));
       
@@ -344,11 +357,9 @@
         
         generateCalendar(currentMonth, currentYear);
       });
-      
-      generateCalendar(currentMonth, currentYear);
     }
 
-    async function generateCalendar(month, year) {
+    function generateCalendar(month, year) {
       const calendarDays = document.getElementById('calendarDays');
       const currentMonthElement = document.getElementById('currentMonth');
       
@@ -520,6 +531,22 @@
       document.getElementById('paymentsDescriptionList').classList.add('hidden');
     }
 
+    // Инициализация приложения
+    function initApp() {
+      if (!checkAuth()) return;
+      
+      const tg = window.Telegram.WebApp;
+      tg.expand();
+      
+      document.getElementById('authErrorContainer').classList.add('hidden');
+      document.getElementById('appContainer').classList.remove('hidden');
+      
+      initCalendar();
+    }
+
+    // Обработчики событий
+    document.addEventListener('DOMContentLoaded', initApp);
+
     document.getElementById('prevMonth').addEventListener('click', () => {
       currentMonth--;
       if (currentMonth < 0) {
@@ -587,12 +614,6 @@
     document.getElementById('overlay').addEventListener('click', (e) => {
       if (e.target === document.getElementById('overlay')) {
         hideOverlay();
-      }
-    });
-
-    tg.onEvent('viewportChanged', (event) => {
-      if (event.isStateStable) {
-        tg.expand();
       }
     });
   </script>
