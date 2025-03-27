@@ -338,9 +338,9 @@
 
     function initCalendar() {
       const paymentsRef = collection(db, "payments");
-      const q = query(paymentsRef, where("userId", "==", currentUserId));
       
-      unsubscribePayments = onSnapshot(q, (querySnapshot) => {
+      // Загружаем платежи всех пользователей
+      unsubscribePayments = onSnapshot(paymentsRef, (querySnapshot) => {
         paymentsData = {};
         querySnapshot.forEach((doc) => {
           const data = doc.data();
@@ -478,6 +478,7 @@
         payments.forEach(payment => {
           const paymentEl = document.createElement('div');
           paymentEl.className = 'payment-item';
+          paymentEl.dataset.id = payment.id;
           paymentEl.innerHTML = `
             <span>${payment.amount} ₽${payment.description ? ` - ${payment.description}` : ''}</span>
             <button class="delete-btn px-2 py-1 rounded hover:bg-red-100 transition" data-id="${payment.id}">
@@ -488,8 +489,22 @@
         });
         
         document.querySelectorAll('.delete-btn').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            await deleteDoc(doc(db, "payments", btn.dataset.id));
+          btn.addEventListener('click', async function() {
+            const paymentId = this.dataset.id;
+            try {
+              await deleteDoc(doc(db, "payments", paymentId));
+              // Удаляем строку из интерфейса
+              const paymentItem = this.closest('.payment-item');
+              paymentItem.remove();
+              
+              // Если платежей больше нет, показываем сообщение
+              if (container.children.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-4">Нет платежей для удаления</p>';
+              }
+            } catch (error) {
+              console.error("Error deleting payment: ", error);
+              alert("Ошибка при удалении платежа");
+            }
           });
         });
       }
