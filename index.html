@@ -18,20 +18,9 @@
       --border-color: #E5E7EB;
     }
 
-    [data-theme="dark"] {
-      --primary-color: #60A5FA;
-      --secondary-color: #3B82F6;
-      --danger-color: #F87171;
-      --success-color: #34D399;
-      --text-color: #F3F4F6;
-      --bg-color: #1F2937;
-      --border-color: #374151;
-    }
-
     body {
       background-color: var(--bg-color);
       color: var(--text-color);
-      transition: background-color 0.3s, color 0.3s;
     }
 
     .day-cell {
@@ -137,12 +126,6 @@
       padding: 20px;
     }
 
-    .stats-container {
-      margin-top: 1rem;
-      padding: 1rem;
-      border-top: 1px solid var(--border-color);
-    }
-
     .chart-container {
       margin-top: 1rem;
       height: 200px;
@@ -164,7 +147,7 @@
   </style>
 </head>
 <body>
-  <button id="themeToggle" class="theme-toggle p-2 rounded-full bg-gray-200 dark:bg-gray-700">
+  <button id="themeToggle" class="theme-toggle p-2 rounded-full bg-gray-200">
     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path class="sun-icon hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
       <path class="moon-icon" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
@@ -172,15 +155,15 @@
   </button>
 
   <div id="authErrorContainer" class="auth-error hidden">
-    <div class="max-w-md p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md">
+    <div class="max-w-md p-6 bg-white rounded-lg shadow-md">
       <h2 class="text-2xl font-bold text-red-600 mb-4">Ошибка доступа</h2>
       <p id="authErrorMessage" class="mb-4"></p>
-      <p class="text-sm text-gray-500 dark:text-gray-400">Обратитесь к администратору</p>
+      <p class="text-sm text-gray-500">Обратитесь к администратору</p>
     </div>
   </div>
 
   <div id="appContainer" class="hidden">
-    <div class="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+    <div class="max-w-md mx-auto bg-white rounded-lg shadow-md overflow-hidden">
       <div class="bg-blue-500 text-white py-3 px-4 flex justify-between items-center">
         <button id="prevMonth" class="text-white hover:text-blue-200 focus:outline-none">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -195,37 +178,20 @@
         </button>
       </div>
       
-      <div class="grid grid-cols-7 gap-1 p-2 bg-gray-100 dark:bg-gray-700">
-        <div class="text-center text-gray-600 dark:text-gray-300 font-medium text-sm py-1">Пн</div>
-        <div class="text-center text-gray-600 dark:text-gray-300 font-medium text-sm py-1">Вт</div>
-        <div class="text-center text-gray-600 dark:text-gray-300 font-medium text-sm py-1">Ср</div>
-        <div class="text-center text-gray-600 dark:text-gray-300 font-medium text-sm py-1">Чт</div>
-        <div class="text-center text-gray-600 dark:text-gray-300 font-medium text-sm py-1">Пт</div>
-        <div class="text-center text-gray-600 dark:text-gray-300 font-medium text-sm py-1">Сб</div>
-        <div class="text-center text-gray-600 dark:text-gray-300 font-medium text-sm py-1">Вс</div>
+      <div class="grid grid-cols-7 gap-1 p-2 bg-gray-100">
+        <div class="text-center text-gray-600 font-medium text-sm py-1">Пн</div>
+        <div class="text-center text-gray-600 font-medium text-sm py-1">Вт</div>
+        <div class="text-center text-gray-600 font-medium text-sm py-1">Ср</div>
+        <div class="text-center text-gray-600 font-medium text-sm py-1">Чт</div>
+        <div class="text-center text-gray-600 font-medium text-sm py-1">Пт</div>
+        <div class="text-center text-gray-600 font-medium text-sm py-1">Сб</div>
+        <div class="text-center text-gray-600 font-medium text-sm py-1">Вс</div>
       </div>
       
       <div id="calendarDays" class="grid grid-cols-7 gap-1 p-2"></div>
 
       <div class="month-total">
         Итого за месяц: <span id="monthTotal">0</span> ₽
-      </div>
-
-      <div class="stats-container">
-        <h3 class="text-lg font-semibold mb-2">Статистика</h3>
-        <div class="grid grid-cols-2 gap-4 mb-4">
-          <div class="bg-blue-100 dark:bg-blue-900 p-3 rounded">
-            <div class="text-sm text-blue-800 dark:text-blue-200">Разовые платежи</div>
-            <div id="oneTimeTotal" class="text-xl font-bold text-blue-600 dark:text-blue-300">0 ₽</div>
-          </div>
-          <div class="bg-green-100 dark:bg-green-900 p-3 rounded">
-            <div class="text-sm text-green-800 dark:text-green-200">Постоянные платежи</div>
-            <div id="recurringTotal" class="text-xl font-bold text-green-600 dark:text-green-300">0 ₽</div>
-          </div>
-        </div>
-        <div class="chart-container">
-          <canvas id="paymentsChart"></canvas>
-        </div>
       </div>
     </div>
 
@@ -247,7 +213,7 @@
             </button>
           </div>
           <div class="flex justify-end mt-4">
-            <button id="cancelActions" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded hover:bg-gray-400 dark:hover:bg-gray-500 transition">
+            <button id="cancelActions" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition">
               Закрыть
             </button>
           </div>
@@ -259,15 +225,15 @@
           </div>
           <form id="paymentForm">
             <div class="mb-4">
-              <label class="block text-gray-700 dark:text-gray-300 mb-2" for="amount">Сумма (₽)</label>
-              <input type="number" id="amount" class="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" required>
+              <label class="block text-gray-700 mb-2" for="amount">Сумма (₽)</label>
+              <input type="number" id="amount" class="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required>
             </div>
             <div class="mb-4">
-              <label class="block text-gray-700 dark:text-gray-300 mb-2" for="description">Описание</label>
-              <input type="text" id="description" class="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+              <label class="block text-gray-700 mb-2" for="description">Описание</label>
+              <input type="text" id="description" class="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div class="mb-4">
-              <label class="block text-gray-700 dark:text-gray-300 mb-2">Тип платежа</label>
+              <label class="block text-gray-700 mb-2">Тип платежа</label>
               <div class="flex border rounded overflow-hidden">
                 <div id="oneTimeOption" class="toggle-option flex-1 active" data-value="one-time">
                   Разовый
@@ -282,7 +248,7 @@
               <button type="submit" class="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
                 Добавить
               </button>
-              <button type="button" id="cancelAdd" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded hover:bg-gray-400 dark:hover:bg-gray-500 transition">
+              <button type="button" id="cancelAdd" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition">
                 Отмена
               </button>
             </div>
@@ -295,7 +261,7 @@
           </div>
           <div id="paymentsToDelete" class="mb-4"></div>
           <div class="flex justify-end">
-            <button id="cancelDelete" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded hover:bg-gray-400 dark:hover:bg-gray-500 transition">
+            <button id="cancelDelete" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition">
               Назад
             </button>
           </div>
@@ -307,7 +273,7 @@
           </div>
           <div id="paymentsDescriptions" class="mb-4"></div>
           <div class="flex justify-end">
-            <button id="cancelDescription" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded hover:bg-gray-400 dark:hover:bg-gray-500 transition">
+            <button id="cancelDescription" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition">
               Назад
             </button>
           </div>
@@ -328,8 +294,7 @@
       query, 
       where, 
       onSnapshot,
-      Timestamp,
-      orderBy
+      Timestamp
     } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
 
     // Конфигурация Firebase
@@ -350,19 +315,32 @@
     // Создание структуры базы данных
     async function createDatabaseStructure() {
       try {
-        // Создаем документ-контейнер для разовых платежей
-        await addDoc(collection(db, "payments"), {
-          type: "one_time_payments"
-        });
-
-        // Создаем документ-контейнер для повторяющихся платежей
-        await addDoc(collection(db, "payments"), {
-          type: "recurring_payments"
-        });
-
-        console.log("Database structure created successfully");
+        // Проверяем существование коллекций
+        const oneTimeRef = collection(db, "payments/one_time/items");
+        const recurringRef = collection(db, "payments/recurring/items");
+        
+        // Создаем базовые документы только если они не существуют
+        const oneTimeSnapshot = await getDocs(oneTimeRef);
+        const recurringSnapshot = await getDocs(recurringRef);
+        
+        if (oneTimeSnapshot.empty && recurringSnapshot.empty) {
+          console.log("Creating initial database structure...");
+          
+          // Создаем базовую структуру
+          await addDoc(collection(db, "payments"), {
+            type: "one_time_payments"
+          });
+          
+          await addDoc(collection(db, "payments"), {
+            type: "recurring_payments"
+          });
+          
+          console.log("Database structure created successfully");
+        } else {
+          console.log("Database structure already exists");
+        }
       } catch (error) {
-        console.error("Error creating database structure:", error);
+        console.error("Error checking/creating database structure:", error);
       }
     }
 
@@ -380,7 +358,6 @@
     let paymentsData = {};
     let currentUserId = null;
     let unsubscribePayments = null;
-    let paymentsChart = null;
 
     const months = [
       'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
@@ -439,67 +416,17 @@
 
     function calculateMonthTotal() {
       let total = 0;
-      let oneTimeTotal = 0;
-      let recurringTotal = 0;
       
       Object.entries(paymentsData).forEach(([dateString, payments]) => {
         const date = new Date(dateString);
         if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
           payments.forEach(payment => {
             total += payment.amount;
-            if (payment.paymentType === 'one-time') {
-              oneTimeTotal += payment.amount;
-            } else {
-              recurringTotal += payment.amount;
-            }
           });
         }
       });
       
       document.getElementById('monthTotal').textContent = total.toLocaleString();
-      document.getElementById('oneTimeTotal').textContent = oneTimeTotal.toLocaleString() + ' ₽';
-      document.getElementById('recurringTotal').textContent = recurringTotal.toLocaleString() + ' ₽';
-
-      updateChart();
-    }
-
-    function updateChart() {
-      const ctx = document.getElementById('paymentsChart').getContext('2d');
-      
-      if (paymentsChart) {
-        paymentsChart.destroy();
-      }
-
-      const oneTimeTotal = Object.values(paymentsData)
-        .flat()
-        .filter(p => p.paymentType === 'one-time')
-        .reduce((sum, p) => sum + p.amount, 0);
-
-      const recurringTotal = Object.values(paymentsData)
-        .flat()
-        .filter(p => p.paymentType === 'recurring')
-        .reduce((sum, p) => sum + p.amount, 0);
-
-      paymentsChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: ['Разовые платежи', 'Постоянные платежи'],
-          datasets: [{
-            data: [oneTimeTotal, recurringTotal],
-            backgroundColor: ['#EF4444', '#10B981'],
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'bottom'
-            }
-          }
-        }
-      });
     }
 
     async function initCalendar() {
@@ -525,7 +452,7 @@
 
         // Обработчик разовых платежей
         const unsubscribeOneTime = onSnapshot(oneTimeQuery, (snapshot) => {
-          console.log('Received one-time payment data');
+          console.log('Received one-time payments:', snapshot.size);
           const oneTimePayments = {};
           
           snapshot.forEach((doc) => {
@@ -546,16 +473,21 @@
           
           paymentsData = { ...paymentsData, ...oneTimePayments };
           generateCalendar(currentMonth, currentYear);
+        }, (error) => {
+          console.error('Error in one-time payments listener:', error);
         });
 
         // Обработчик повторяющихся платежей
         const unsubscribeRecurring = onSnapshot(recurringQuery, async (snapshot) => {
-          console.log('Received recurring payment data');
+          console.log('Received recurring payments:', snapshot.size);
           const recurringPayments = {};
           
           for (const doc of snapshot.docs) {
             const template = doc.data();
+            console.log('Processing recurring template:', template);
+            
             const instancesSnapshot = await getDocs(collection(doc.ref, "instances"));
+            console.log('Found instances:', instancesSnapshot.size);
             
             instancesSnapshot.forEach((instanceDoc) => {
               const instance = instanceDoc.data();
@@ -576,6 +508,8 @@
           
           paymentsData = { ...paymentsData, ...recurringPayments };
           generateCalendar(currentMonth, currentYear);
+        }, (error) => {
+          console.error('Error in recurring payments listener:', error);
         });
 
         // Сохраняем функции отписки
@@ -665,7 +599,7 @@
         }
         
         if (isToday) {
-          dayClasses += ' bg-blue-100 dark:bg-blue-900 font-bold';
+          dayClasses += ' bg-blue-100 font-bold';
         }
         
         dayElement.className = dayClasses;
@@ -733,7 +667,7 @@
       const payments = paymentsData[dateString] || [];
       
       if (payments.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-4">Нет платежей для удаления</p>';
+        container.innerHTML = '<p class="text-gray-500 text-center py-4">Нет платежей для удаления</p>';
       } else {
         payments.forEach(payment => {
           const paymentEl = document.createElement('div');
@@ -743,9 +677,9 @@
             <div class="flex justify-between items-center w-full">
               <div>
                 <div class="font-medium">${payment.amount.toLocaleString()} ₽</div>
-                ${payment.description ? `<div class="text-sm text-gray-600 dark:text-gray-400">${payment.description}</div>` : ''}
+                ${payment.description ? `<div class="text-sm text-gray-600">${payment.description}</div>` : ''}
               </div>
-              <button class="delete-btn px-3 py-1 rounded hover:bg-red-100 dark:hover:bg-red-900" 
+              <button class="delete-btn px-3 py-1 rounded hover:bg-red-100" 
                       onclick="deletePayment('${payment.id}', ${isRecurring})">
                 Удалить
               </button>
@@ -777,9 +711,6 @@
         
         // Создаем структуру базы данных
         await createDatabaseStructure();
-        
-        // Инициализируем тему
-        initTheme();
         
         // Инициализируем календарь
         await initCalendar();
@@ -984,7 +915,7 @@
       const payments = paymentsData[dateString] || [];
       
       if (payments.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-4">Нет платежей для отображения</p>';
+        container.innerHTML = '<p class="text-gray-500 text-center py-4">Нет платежей для отображения</p>';
       } else {
         payments.forEach(payment => {
           const paymentEl = document.createElement('div');
@@ -994,12 +925,12 @@
             <div class="w-full">
               <div class="font-medium">
                 ${payment.amount.toLocaleString()} ₽ 
-                <span class="text-xs ${isRecurring ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                <span class="text-xs ${isRecurring ? 'text-green-600' : 'text-red-600'}">
                   (${isRecurring ? 'постоянный' : 'разовый'})
                 </span>
               </div>
-              ${payment.description ? `<div class="text-sm text-gray-600 dark:text-gray-400 mt-1">${payment.description}</div>` : ''}
-              <div class="text-xs text-gray-500 dark:text-gray-400">Создан: ${formatDisplayDate(payment.createdAt.toDate())}</div>
+              ${payment.description ? `<div class="text-sm text-gray-600 mt-1">${payment.description}</div>` : ''}
+              <div class="text-xs text-gray-500">Создан: ${formatDisplayDate(payment.createdAt.toDate())}</div>
             </div>
           `;
           container.appendChild(paymentEl);
