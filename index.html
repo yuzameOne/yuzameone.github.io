@@ -341,7 +341,8 @@
       query, 
       where, 
       onSnapshot,
-      getDoc
+      getDoc,
+      orderBy
     } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
 
     // Конфигурация Firebase
@@ -510,6 +511,7 @@
     }
 
     function initCalendar() {
+      console.log('Initializing calendar...');
       const paymentsRef = collection(db, "payments");
       const q = query(
         paymentsRef, 
@@ -517,10 +519,13 @@
         orderBy("date", "asc")
       );
       
+      console.log('Setting up Firebase listener...');
       unsubscribePayments = onSnapshot(q, (querySnapshot) => {
+        console.log('Received payment data from Firebase');
         paymentsData = {};
         querySnapshot.forEach((doc) => {
           const data = doc.data();
+          console.log('Processing payment:', data);
           const date = data.date.toDate();
           
           if (data.paymentType === 'one-time') {
@@ -554,11 +559,15 @@
           }
         });
         
+        console.log('Processed payments data:', paymentsData);
         generateCalendar(currentMonth, currentYear);
+      }, (error) => {
+        console.error('Error in Firebase listener:', error);
       });
     }
 
     function generateCalendar(month, year) {
+      console.log('Generating calendar for:', month, year);
       const calendarDays = document.getElementById('calendarDays');
       const currentMonthElement = document.getElementById('currentMonth');
       
@@ -570,6 +579,14 @@
       const firstDayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
       const prevLastDay = new Date(year, month, 0).getDate();
       
+      console.log('Calendar parameters:', {
+        firstDay,
+        lastDay,
+        firstDayOfWeek,
+        prevLastDay
+      });
+      
+      // Add empty cells for days before the first day of the month
       for (let i = firstDayOfWeek; i > 0; i--) {
         const day = prevLastDay - i + 1;
         const dayElement = document.createElement('div');
@@ -581,11 +598,18 @@
         calendarDays.appendChild(dayElement);
       }
       
+      // Add days of the current month
       for (let i = 1; i <= lastDay.getDate(); i++) {
         const dayElement = document.createElement('div');
         const date = new Date(year, month, i);
         const dateString = formatDate(date);
         const payments = paymentsData[dateString] || [];
+        
+        console.log(`Day ${i}:`, {
+          dateString,
+          payments: payments.length
+        });
+        
         const isToday = i === currentDate.getDate() && 
                         month === currentDate.getMonth() && 
                         year === currentDate.getFullYear();
@@ -636,6 +660,7 @@
         calendarDays.appendChild(dayElement);
       }
       
+      // Add empty cells for days after the last day of the month
       const totalDays = firstDayOfWeek + lastDay.getDate();
       const remainingDays = 7 - (totalDays % 7);
       
