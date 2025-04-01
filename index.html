@@ -328,10 +328,8 @@
       query, 
       where, 
       onSnapshot,
-      getDoc,
-      orderBy,
       Timestamp,
-      subcollection
+      orderBy
     } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
 
     // Конфигурация Firebase
@@ -351,7 +349,7 @@
 
     // Список разрешенных User ID
     const ALLOWED_USER_IDS = [
-      "564940168", // Замените на реальные ID пользователей
+      "564940168",
       "579486395"
     ];
 
@@ -483,54 +481,46 @@
       });
     }
 
-    // Инициализация календаря
-    async function initCalendar() {
+    function initCalendar() {
       console.log('Initializing calendar...');
-      const currentDate = new Date();
-      currentMonth = currentDate.getMonth();
-      currentYear = currentDate.getFullYear();
-      
-      console.log('Setting up Firebase listeners...');
       
       // Слушатель для разовых платежей
       const oneTimeQuery = query(
-        collection(db, "payments/one_time"),
+        collection(db, "payments/one_time/items"),
         where("userId", "==", currentUserId),
         orderBy("date", "asc")
       );
       
       // Слушатель для повторяющихся платежей
       const recurringQuery = query(
-        collection(db, "payments/recurring"),
+        collection(db, "payments/recurring/items"),
         where("userId", "==", currentUserId)
       );
 
       // Обработчик разовых платежей
       onSnapshot(oneTimeQuery, (snapshot) => {
         console.log('Received one-time payment data from Firebase');
-        const paymentsData = {};
+        const oneTimePayments = {};
         
         snapshot.forEach((doc) => {
           const payment = doc.data();
           const date = payment.date.toDate();
           const dateStr = formatDate(date);
           
-          if (!paymentsData[dateStr]) {
-            paymentsData[dateStr] = [];
+          if (!oneTimePayments[dateStr]) {
+            oneTimePayments[dateStr] = [];
           }
           
-          paymentsData[dateStr].push({
+          oneTimePayments[dateStr].push({
             id: doc.id,
             ...payment,
             date: date
           });
         });
         
-        console.log('Processed one-time payments:', paymentsData);
-        window.paymentsData = paymentsData;
+        // Обновляем общие данные платежей
+        paymentsData = { ...paymentsData, ...oneTimePayments };
         generateCalendar(currentMonth, currentYear);
-      }, (error) => {
-        console.error('Error in one-time payments listener:', error);
       });
 
       // Обработчик повторяющихся платежей
@@ -559,11 +549,9 @@
           });
         }
         
-        console.log('Processed recurring payments:', recurringPayments);
-        window.recurringPayments = recurringPayments;
+        // Обновляем общие данные платежей
+        paymentsData = { ...paymentsData, ...recurringPayments };
         generateCalendar(currentMonth, currentYear);
-      }, (error) => {
-        console.error('Error in recurring payments listener:', error);
       });
     }
 
@@ -724,81 +712,6 @@
       }
     }
 
-    async function showDeleteList() {
-      hideAllForms();
-      const deleteList = document.getElementById('paymentsToDelete');
-      deleteList.innerHTML = '';
-      
-      try {
-        // Получаем разовые платежи
-        const oneTimeSnapshot = await getDocs(query(
-          collection(db, "payments/one_time"),
-          where("userId", "==", currentUserId),
-          orderBy("date", "desc")
-        ));
-        
-        // Получаем повторяющиеся платежи
-        const recurringSnapshot = await getDocs(query(
-          collection(db, "payments/recurring"),
-          where("userId", "==", currentUserId)
-        ));
-        
-        if (oneTimeSnapshot.empty && recurringSnapshot.empty) {
-          deleteList.innerHTML = '<p class="text-gray-500">Нет платежей для удаления</p>';
-          return;
-        }
-        
-        // Добавляем разовые платежи
-        oneTimeSnapshot.forEach((doc) => {
-          const payment = doc.data();
-          const date = payment.date.toDate();
-          const dateStr = formatDate(date);
-          
-          const paymentElement = document.createElement('div');
-          paymentElement.className = 'flex items-center justify-between p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded';
-          paymentElement.innerHTML = `
-            <div>
-              <div class="font-medium">${payment.description}</div>
-              <div class="text-sm text-gray-500">${formatCurrency(payment.amount)} • ${dateStr}</div>
-            </div>
-            <button onclick="deletePayment('${doc.id}', false)" class="text-red-500 hover:text-red-700">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-              </svg>
-            </button>
-          `;
-          deleteList.appendChild(paymentElement);
-        });
-        
-        // Добавляем повторяющиеся платежи
-        recurringSnapshot.forEach((doc) => {
-          const payment = doc.data();
-          const date = payment.startDate.toDate();
-          const dateStr = formatDate(date);
-          
-          const paymentElement = document.createElement('div');
-          paymentElement.className = 'flex items-center justify-between p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded';
-          paymentElement.innerHTML = `
-            <div>
-              <div class="font-medium">${payment.description} (Повторяющийся)</div>
-              <div class="text-sm text-gray-500">${formatCurrency(payment.amount)} • ${dateStr}</div>
-            </div>
-            <button onclick="deletePayment('${doc.id}', true)" class="text-red-500 hover:text-red-700">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-              </svg>
-            </button>
-          `;
-          deleteList.appendChild(paymentElement);
-        });
-        
-        openModal('deletePaymentModal');
-      } catch (error) {
-        console.error('Error loading payments for deletion:', error);
-        showError('Ошибка при загрузке платежей');
-      }
-    }
-
     function showDescriptions() {
       hideAllForms();
       const container = document.getElementById('paymentsDescriptions');
@@ -835,7 +748,7 @@
 
     function hideAllForms() {
       document.getElementById('actionsMenu').classList.add('hidden');
-      document.getElementById('addPaymentForm').classList.add('hidden');
+      document.getElementById('addPaymentForm').classList('hidden');
       document.getElementById('deletePaymentsList').classList.add('hidden');
       document.getElementById('paymentsDescriptionList').classList.add('hidden');
     }
