@@ -281,7 +281,8 @@
       getFirestore, 
       collection, 
       addDoc, 
-      getDocs, 
+      getDocs,
+      getDoc, 
       deleteDoc, 
       doc, 
       query, 
@@ -315,8 +316,8 @@
         const recurringRef = doc(paymentsRef, "recurring");
 
         // Проверяем существование документов
-        const oneTimeDoc = await getDocs(oneTimeRef);
-        const recurringDoc = await getDocs(recurringRef);
+        const oneTimeDoc = await getDoc(oneTimeRef);
+        const recurringDoc = await getDoc(recurringRef);
 
         if (!oneTimeDoc.exists()) {
           await setDoc(oneTimeRef, { type: "one_time_payments" });
@@ -444,8 +445,11 @@
           
           snapshot.forEach((doc) => {
             const payment = doc.data();
+            const paymentId = doc.id;
+            console.log('Processing one-time payment:', paymentId, payment);
+            
             if (!payment.date) {
-              console.warn('Payment without date:', doc.id);
+              console.warn('Payment without date:', paymentId);
               return;
             }
             
@@ -457,7 +461,7 @@
             }
             
             oneTimePayments[dateStr].push({
-              id: doc.id,
+              id: paymentId,
               ...payment,
               date: date
             });
@@ -477,35 +481,39 @@
           
           for (const doc of snapshot.docs) {
             const template = doc.data();
-            console.log('Processing recurring template:', template);
+            const templateId = doc.id;
+            console.log('Processing recurring template:', templateId, template);
             
             if (!template.startDate) {
-              console.warn('Template without start date:', doc.id);
+              console.warn('Template without start date:', templateId);
               continue;
             }
 
             try {
               const instancesRef = collection(doc.ref, "instances");
               const instancesSnapshot = await getDocs(instancesRef);
-              console.log('Found instances:', instancesSnapshot.size);
+              console.log('Found instances for template', templateId, ':', instancesSnapshot.size);
               
               instancesSnapshot.forEach((instanceDoc) => {
                 const instance = instanceDoc.data();
+                const instanceId = instanceDoc.id;
                 const dateStr = instance.date;
+                
+                console.log('Processing instance:', instanceId, 'for date:', dateStr);
                 
                 if (!recurringPayments[dateStr]) {
                   recurringPayments[dateStr] = [];
                 }
                 
                 recurringPayments[dateStr].push({
-                  id: instanceDoc.id,
-                  templateId: doc.id,
+                  id: instanceId,
+                  templateId: templateId,
                   ...template,
                   date: new Date(dateStr)
                 });
               });
             } catch (error) {
-              console.error('Error processing recurring payment:', doc.id, error);
+              console.error('Error processing recurring payment:', templateId, error);
             }
           }
           
