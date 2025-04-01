@@ -689,88 +689,77 @@
         `Добавить платеж на ${formatDisplayDate(selectedDate)}`;
     }
 
-    async function deletePayment(paymentId, isRecurring = false) {
-      try {
-        if (isRecurring) {
-          const templateRef = doc(db, "payments/recurring/items", paymentId);
-          const instancesSnapshot = await getDocs(collection(templateRef, "instances"));
-          
-          // Удаляем все экземпляры
-          for (const instance of instancesSnapshot.docs) {
-            await deleteDoc(instance.ref);
-          }
-          
-          // Удаляем шаблон
-          await deleteDoc(templateRef);
-        } else {
-          await deleteDoc(doc(db, "payments/one_time/items", paymentId));
-        }
-        showSuccess('Платеж успешно удален');
-      } catch (error) {
-        console.error('Error deleting payment:', error);
-        showError('Ошибка при удалении платежа');
-      }
-    }
-
-    function showDescriptions() {
+    function showDeleteList() {
       hideAllForms();
-      const container = document.getElementById('paymentsDescriptions');
+      const container = document.getElementById('paymentsToDelete');
       container.innerHTML = '';
       
       const dateString = formatDate(selectedDate);
       const payments = paymentsData[dateString] || [];
       
       if (payments.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-4">Нет платежей для отображения</p>';
+        container.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-4">Нет платежей для удаления</p>';
       } else {
         payments.forEach(payment => {
           const paymentEl = document.createElement('div');
           paymentEl.className = 'payment-item';
           const isRecurring = payment.paymentType === 'recurring';
           paymentEl.innerHTML = `
-            <div class="w-full">
-              <div class="font-medium">
-                ${payment.amount} ₽ 
-                <span class="text-xs ${isRecurring ? 'text-green-600' : 'text-red-600'}">
-                  (${isRecurring ? 'постоянный' : 'разовый'})
-                </span>
+            <div class="flex justify-between items-center w-full">
+              <div>
+                <div class="font-medium">${payment.amount.toLocaleString()} ₽</div>
+                ${payment.description ? `<div class="text-sm text-gray-600 dark:text-gray-400">${payment.description}</div>` : ''}
               </div>
-              ${payment.description ? `<div class="text-sm text-gray-600 dark:text-gray-400 mt-1">${payment.description}</div>` : ''}
-              ${payment.originalDate ? `<div class="text-xs text-gray-500 dark:text-gray-400">Создан: ${payment.originalDate}</div>` : ''}
+              <button class="delete-btn px-3 py-1 rounded hover:bg-red-100 dark:hover:bg-red-900" 
+                      onclick="deletePayment('${payment.id}', ${isRecurring})">
+                Удалить
+              </button>
             </div>
           `;
           container.appendChild(paymentEl);
         });
       }
       
-      document.getElementById('paymentsDescriptionList').classList.remove('hidden');
+      document.getElementById('deletePaymentsList').classList.remove('hidden');
     }
 
     function hideAllForms() {
       document.getElementById('actionsMenu').classList.add('hidden');
-      document.getElementById('addPaymentForm').classList('hidden');
+      document.getElementById('addPaymentForm').classList.add('hidden');
       document.getElementById('deletePaymentsList').classList.add('hidden');
       document.getElementById('paymentsDescriptionList').classList.add('hidden');
     }
 
-    // Инициализация приложения
-    function initApp() {
-      if (!checkAuth()) return;
-      
-      const tg = window.Telegram.WebApp;
-      tg.expand();
-      
-      document.getElementById('authErrorContainer').classList.add('hidden');
-      document.getElementById('appContainer').classList.remove('hidden');
-      
-      initCalendar();
-      initTheme();
+    async function initApp() {
+      try {
+        if (!checkAuth()) return;
+        
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        document.getElementById('authErrorContainer').classList.add('hidden');
+        document.getElementById('appContainer').classList.remove('hidden');
+        
+        // Инициализируем тему до календаря
+        initTheme();
+        
+        // Инициализируем календарь
+        await initCalendar();
+        
+        // Первичная генерация календаря
+        generateCalendar(currentMonth, currentYear);
+        
+        console.log('App initialized successfully');
+      } catch (error) {
+        console.error('Error initializing app:', error);
+        showError('Ошибка инициализации приложения');
+      }
     }
 
-    // Управление темой
     function initTheme() {
       const theme = localStorage.getItem('theme') || 'light';
       document.documentElement.setAttribute('data-theme', theme);
+      document.body.classList.toggle('dark', theme === 'dark');
       updateThemeIcon(theme);
     }
 
@@ -834,6 +823,7 @@
       const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
       
       document.documentElement.setAttribute('data-theme', newTheme);
+      document.body.classList.toggle('dark', newTheme === 'dark');
       localStorage.setItem('theme', newTheme);
       updateThemeIcon(newTheme);
     });
@@ -919,6 +909,66 @@
 
     function closeModal(modalId) {
       document.getElementById(modalId).classList.add('hidden');
+    }
+
+    // Добавляем глобальную функцию deletePayment
+    window.deletePayment = async function(paymentId, isRecurring) {
+      try {
+        if (isRecurring) {
+          const templateRef = doc(db, "payments/recurring/items", paymentId);
+          const instancesSnapshot = await getDocs(collection(templateRef, "instances"));
+          
+          // Удаляем все экземпляры
+          for (const instance of instancesSnapshot.docs) {
+            await deleteDoc(instance.ref);
+          }
+          
+          // Удаляем шаблон
+          await deleteDoc(templateRef);
+        } else {
+          await deleteDoc(doc(db, "payments/one_time/items", paymentId));
+        }
+        
+        showSuccess('Платеж успешно удален');
+        showActionsMenu(); // Возвращаемся к меню действий
+      } catch (error) {
+        console.error('Error deleting payment:', error);
+        showError('Ошибка при удалении платежа');
+      }
+    };
+
+    function showDescriptions() {
+      hideAllForms();
+      const container = document.getElementById('paymentsDescriptions');
+      container.innerHTML = '';
+      
+      const dateString = formatDate(selectedDate);
+      const payments = paymentsData[dateString] || [];
+      
+      if (payments.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-4">Нет платежей для отображения</p>';
+      } else {
+        payments.forEach(payment => {
+          const paymentEl = document.createElement('div');
+          paymentEl.className = 'payment-item';
+          const isRecurring = payment.paymentType === 'recurring';
+          paymentEl.innerHTML = `
+            <div class="w-full">
+              <div class="font-medium">
+                ${payment.amount.toLocaleString()} ₽ 
+                <span class="text-xs ${isRecurring ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                  (${isRecurring ? 'постоянный' : 'разовый'})
+                </span>
+              </div>
+              ${payment.description ? `<div class="text-sm text-gray-600 dark:text-gray-400 mt-1">${payment.description}</div>` : ''}
+              <div class="text-xs text-gray-500 dark:text-gray-400">Создан: ${formatDisplayDate(payment.createdAt.toDate())}</div>
+            </div>
+          `;
+          container.appendChild(paymentEl);
+        });
+      }
+      
+      document.getElementById('paymentsDescriptionList').classList.remove('hidden');
     }
   </script>
 </body>
