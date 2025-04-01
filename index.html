@@ -451,28 +451,23 @@
         paymentsChart.destroy();
       }
 
-      const categoryTotals = {};
-      Object.entries(paymentsData).forEach(([dateString, payments]) => {
-        const date = new Date(dateString);
-        if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
-          payments.forEach(payment => {
-            const category = payment.category || 'other';
-            categoryTotals[category] = (categoryTotals[category] || 0) + payment.amount;
-          });
-        }
-      });
+      const oneTimeTotal = Object.values(paymentsData)
+        .flat()
+        .filter(p => p.paymentType === 'one-time')
+        .reduce((sum, p) => sum + p.amount, 0);
 
-      const labels = Object.keys(categoryTotals).map(cat => categories[cat].name);
-      const data = Object.values(categoryTotals);
-      const colors = Object.keys(categoryTotals).map(cat => categories[cat].color);
+      const recurringTotal = Object.values(paymentsData)
+        .flat()
+        .filter(p => p.paymentType === 'recurring')
+        .reduce((sum, p) => sum + p.amount, 0);
 
       paymentsChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: labels,
+          labels: ['Разовые платежи', 'Постоянные платежи'],
           datasets: [{
-            data: data,
-            backgroundColor: colors,
+            data: [oneTimeTotal, recurringTotal],
+            backgroundColor: ['#EF4444', '#10B981'],
             borderWidth: 1
           }]
         },
@@ -709,13 +704,19 @@
     async function deletePayment(paymentId, isRecurring = false) {
       try {
         if (isRecurring) {
-          // Удаляем шаблон повторяющегося платежа
-          await deleteDoc(doc(db, "payments/recurring", paymentId));
+          const templateRef = doc(db, "payments/recurring/items", paymentId);
+          const instancesSnapshot = await getDocs(collection(templateRef, "instances"));
+          
+          // Удаляем все экземпляры
+          for (const instance of instancesSnapshot.docs) {
+            await deleteDoc(instance.ref);
+          }
+          
+          // Удаляем шаблон
+          await deleteDoc(templateRef);
         } else {
-          // Удаляем разовый платеж
-          await deleteDoc(doc(db, "payments/one_time", paymentId));
+          await deleteDoc(doc(db, "payments/one_time/items", paymentId));
         }
-        closeModal('deletePaymentModal');
         showSuccess('Платеж успешно удален');
       } catch (error) {
         console.error('Error deleting payment:', error);
@@ -931,6 +932,11 @@
       const description = document.getElementById('description').value;
       const paymentType = document.getElementById('paymentType').value;
       
+      if (!amount || amount <= 0) {
+        showError('Введите корректную сумму');
+        return;
+      }
+      
       try {
         if (paymentType === 'one-time') {
           await addDoc(collection(db, "payments/one_time/items"), {
@@ -938,7 +944,8 @@
             description: description,
             date: Timestamp.fromDate(selectedDate),
             userId: currentUserId,
-            createdAt: Timestamp.now()
+            createdAt: Timestamp.now(),
+            paymentType: 'one-time'
           });
         } else {
           const templateRef = await addDoc(collection(db, "payments/recurring/items"), {
@@ -946,7 +953,8 @@
             description: description,
             startDate: Timestamp.fromDate(selectedDate),
             userId: currentUserId,
-            createdAt: Timestamp.now()
+            createdAt: Timestamp.now(),
+            paymentType: 'recurring'
           });
 
           // Создаем экземпляры на 12 месяцев
@@ -966,9 +974,10 @@
         
         document.getElementById('paymentForm').reset();
         hideOverlay();
+        showSuccess('Платеж успешно добавлен');
       } catch (error) {
         console.error("Error adding payment: ", error);
-        alert("Ошибка при добавлении платежа");
+        showError("Ошибка при добавлении платежа");
       }
     });
 
@@ -977,6 +986,27 @@
         hideOverlay();
       }
     });
+
+    // Добавляем вспомогательные функции
+    function formatCurrency(amount) {
+      return amount.toLocaleString() + ' ₽';
+    }
+
+    function showSuccess(message) {
+      alert(message);
+    }
+
+    function showError(message) {
+      alert('Ошибка: ' + message);
+    }
+
+    function openModal(modalId) {
+      document.getElementById(modalId).classList.remove('hidden');
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.add('hidden');
+    }
   </script>
 </body>
 </html>
