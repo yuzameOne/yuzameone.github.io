@@ -287,7 +287,8 @@
       query, 
       where, 
       onSnapshot,
-      Timestamp
+      Timestamp,
+      setDoc
     } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
 
     // Конфигурация Firebase
@@ -308,32 +309,25 @@
     // Создание структуры базы данных
     async function createDatabaseStructure() {
       try {
-        // Проверяем существование коллекций
-        const oneTimeRef = collection(db, "payments/one_time/items");
-        const recurringRef = collection(db, "payments/recurring/items");
-        
-        // Создаем базовые документы только если они не существуют
-        const oneTimeSnapshot = await getDocs(oneTimeRef);
-        const recurringSnapshot = await getDocs(recurringRef);
-        
-        if (oneTimeSnapshot.empty && recurringSnapshot.empty) {
-          console.log("Creating initial database structure...");
-          
-          // Создаем базовую структуру
-          await addDoc(collection(db, "payments"), {
-            type: "one_time_payments"
-          });
-          
-          await addDoc(collection(db, "payments"), {
-            type: "recurring_payments"
-          });
-          
-          console.log("Database structure created successfully");
-        } else {
-          console.log("Database structure already exists");
+        // Создаем корневые документы для структуры, если их нет
+        const paymentsRef = collection(db, "payments");
+        const oneTimeRef = doc(paymentsRef, "one_time");
+        const recurringRef = doc(paymentsRef, "recurring");
+
+        // Проверяем существование документов
+        const oneTimeDoc = await getDocs(oneTimeRef);
+        const recurringDoc = await getDocs(recurringRef);
+
+        if (!oneTimeDoc.exists()) {
+          await setDoc(oneTimeRef, { type: "one_time_payments" });
         }
+        if (!recurringDoc.exists()) {
+          await setDoc(recurringRef, { type: "recurring_payments" });
+        }
+
+        console.log("Database structure verified/created");
       } catch (error) {
-        console.error("Error checking/creating database structure:", error);
+        console.error("Error in createDatabaseStructure:", error);
       }
     }
 
@@ -450,6 +444,11 @@
           
           snapshot.forEach((doc) => {
             const payment = doc.data();
+            if (!payment.date) {
+              console.warn('Payment without date:', doc.id);
+              return;
+            }
+            
             const date = payment.date.toDate();
             const dateStr = formatDate(date);
             
@@ -464,6 +463,7 @@
             });
           });
           
+          console.log('Processed one-time payments:', oneTimePayments);
           paymentsData = { ...paymentsData, ...oneTimePayments };
           generateCalendar(currentMonth, currentYear);
         }, (error) => {
@@ -479,26 +479,37 @@
             const template = doc.data();
             console.log('Processing recurring template:', template);
             
-            const instancesSnapshot = await getDocs(collection(doc.ref, "instances"));
-            console.log('Found instances:', instancesSnapshot.size);
-            
-            instancesSnapshot.forEach((instanceDoc) => {
-              const instance = instanceDoc.data();
-              const dateStr = instance.date;
+            if (!template.startDate) {
+              console.warn('Template without start date:', doc.id);
+              continue;
+            }
+
+            try {
+              const instancesRef = collection(doc.ref, "instances");
+              const instancesSnapshot = await getDocs(instancesRef);
+              console.log('Found instances:', instancesSnapshot.size);
               
-              if (!recurringPayments[dateStr]) {
-                recurringPayments[dateStr] = [];
-              }
-              
-              recurringPayments[dateStr].push({
-                id: instanceDoc.id,
-                templateId: doc.id,
-                ...template,
-                date: new Date(dateStr)
+              instancesSnapshot.forEach((instanceDoc) => {
+                const instance = instanceDoc.data();
+                const dateStr = instance.date;
+                
+                if (!recurringPayments[dateStr]) {
+                  recurringPayments[dateStr] = [];
+                }
+                
+                recurringPayments[dateStr].push({
+                  id: instanceDoc.id,
+                  templateId: doc.id,
+                  ...template,
+                  date: new Date(dateStr)
+                });
               });
-            });
+            } catch (error) {
+              console.error('Error processing recurring payment:', doc.id, error);
+            }
           }
           
+          console.log('Processed recurring payments:', recurringPayments);
           paymentsData = { ...paymentsData, ...recurringPayments };
           generateCalendar(currentMonth, currentYear);
         }, (error) => {
@@ -771,10 +782,23 @@
         showError('Введите корректную сумму');
         return;
       }
+
+      if (!selectedDate) {
+        showError('Выберите дату');
+        return;
+      }
       
       try {
+        console.log('Adding payment:', {
+          amount,
+          description,
+          paymentType,
+          selectedDate,
+          userId: currentUserId
+        });
+
         if (paymentType === 'one-time') {
-          await addDoc(collection(db, "payments/one_time/items"), {
+          const docRef = await addDoc(collection(db, "payments/one_time/items"), {
             amount: amount,
             description: description,
             date: Timestamp.fromDate(new Date(selectedDate)),
@@ -782,6 +806,7 @@
             createdAt: Timestamp.now(),
             paymentType: 'one-time'
           });
+          console.log('Added one-time payment:', docRef.id);
         } else {
           const templateRef = await addDoc(collection(db, "payments/recurring/items"), {
             amount: amount,
@@ -791,6 +816,7 @@
             createdAt: Timestamp.now(),
             paymentType: 'recurring'
           });
+          console.log('Added recurring payment template:', templateRef.id);
 
           // Создаем экземпляры на 12 месяцев
           const startDate = new Date(selectedDate);
@@ -799,10 +825,11 @@
           
           let currentDate = new Date(startDate);
           while (currentDate <= endDate) {
-            await addDoc(collection(templateRef, "instances"), {
+            const instanceRef = await addDoc(collection(templateRef, "instances"), {
               date: formatDate(currentDate),
               userId: currentUserId
             });
+            console.log('Added instance:', instanceRef.id, 'for date:', formatDate(currentDate));
             currentDate.setMonth(currentDate.getMonth() + 1);
           }
         }
@@ -812,7 +839,7 @@
         showSuccess('Платеж успешно добавлен');
       } catch (error) {
         console.error("Error adding payment: ", error);
-        showError("Ошибка при добавлении платежа");
+        showError("Ошибка при добавлении платежа: " + error.message);
       }
     });
 
