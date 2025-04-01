@@ -347,6 +347,25 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    // Создание структуры базы данных
+    async function createDatabaseStructure() {
+      try {
+        // Создаем документ-контейнер для разовых платежей
+        await addDoc(collection(db, "payments"), {
+          type: "one_time_payments"
+        });
+
+        // Создаем документ-контейнер для повторяющихся платежей
+        await addDoc(collection(db, "payments"), {
+          type: "recurring_payments"
+        });
+
+        console.log("Database structure created successfully");
+      } catch (error) {
+        console.error("Error creating database structure:", error);
+      }
+    }
+
     // Список разрешенных User ID
     const ALLOWED_USER_IDS = [
       "564940168",
@@ -401,10 +420,12 @@
 
     // Функции календаря
     function formatDate(date) {
-      const d = new Date(date);
-      let month = '' + (d.getMonth() + 1);
-      let day = '' + d.getDate();
-      const year = d.getFullYear();
+      if (!(date instanceof Date)) {
+        date = new Date(date);
+      }
+      let month = '' + (date.getMonth() + 1);
+      let day = '' + date.getDate();
+      const year = date.getFullYear();
       
       if (month.length < 2) month = '0' + month;
       if (day.length < 2) day = '0' + day;
@@ -481,78 +502,92 @@
       });
     }
 
-    function initCalendar() {
+    async function initCalendar() {
       console.log('Initializing calendar...');
       
-      // Слушатель для разовых платежей
-      const oneTimeQuery = query(
-        collection(db, "payments/one_time/items"),
-        where("userId", "==", currentUserId),
-        orderBy("date", "asc")
-      );
-      
-      // Слушатель для повторяющихся платежей
-      const recurringQuery = query(
-        collection(db, "payments/recurring/items"),
-        where("userId", "==", currentUserId)
-      );
+      try {
+        // Слушатель для разовых платежей
+        const oneTimeQuery = query(
+          collection(db, "payments/one_time/items"),
+          where("userId", "==", currentUserId)
+        );
+        
+        // Слушатель для повторяющихся платежей
+        const recurringQuery = query(
+          collection(db, "payments/recurring/items"),
+          where("userId", "==", currentUserId)
+        );
 
-      // Обработчик разовых платежей
-      onSnapshot(oneTimeQuery, (snapshot) => {
-        console.log('Received one-time payment data from Firebase');
-        const oneTimePayments = {};
-        
-        snapshot.forEach((doc) => {
-          const payment = doc.data();
-          const date = payment.date.toDate();
-          const dateStr = formatDate(date);
-          
-          if (!oneTimePayments[dateStr]) {
-            oneTimePayments[dateStr] = [];
-          }
-          
-          oneTimePayments[dateStr].push({
-            id: doc.id,
-            ...payment,
-            date: date
-          });
-        });
-        
-        // Обновляем общие данные платежей
-        paymentsData = { ...paymentsData, ...oneTimePayments };
-        generateCalendar(currentMonth, currentYear);
-      });
+        // Отписываемся от предыдущих подписок
+        if (unsubscribePayments) {
+          unsubscribePayments();
+        }
 
-      // Обработчик повторяющихся платежей
-      onSnapshot(recurringQuery, async (snapshot) => {
-        console.log('Received recurring payment data from Firebase');
-        const recurringPayments = {};
-        
-        for (const doc of snapshot.docs) {
-          const template = doc.data();
-          const instancesSnapshot = await getDocs(collection(doc.ref, "instances"));
+        // Обработчик разовых платежей
+        const unsubscribeOneTime = onSnapshot(oneTimeQuery, (snapshot) => {
+          console.log('Received one-time payment data');
+          const oneTimePayments = {};
           
-          instancesSnapshot.forEach((instanceDoc) => {
-            const instance = instanceDoc.data();
-            const dateStr = instance.date;
+          snapshot.forEach((doc) => {
+            const payment = doc.data();
+            const date = payment.date.toDate();
+            const dateStr = formatDate(date);
             
-            if (!recurringPayments[dateStr]) {
-              recurringPayments[dateStr] = [];
+            if (!oneTimePayments[dateStr]) {
+              oneTimePayments[dateStr] = [];
             }
             
-            recurringPayments[dateStr].push({
-              id: instanceDoc.id,
-              templateId: doc.id,
-              ...template,
-              date: new Date(dateStr)
+            oneTimePayments[dateStr].push({
+              id: doc.id,
+              ...payment,
+              date: date
             });
           });
-        }
-        
-        // Обновляем общие данные платежей
-        paymentsData = { ...paymentsData, ...recurringPayments };
-        generateCalendar(currentMonth, currentYear);
-      });
+          
+          paymentsData = { ...paymentsData, ...oneTimePayments };
+          generateCalendar(currentMonth, currentYear);
+        });
+
+        // Обработчик повторяющихся платежей
+        const unsubscribeRecurring = onSnapshot(recurringQuery, async (snapshot) => {
+          console.log('Received recurring payment data');
+          const recurringPayments = {};
+          
+          for (const doc of snapshot.docs) {
+            const template = doc.data();
+            const instancesSnapshot = await getDocs(collection(doc.ref, "instances"));
+            
+            instancesSnapshot.forEach((instanceDoc) => {
+              const instance = instanceDoc.data();
+              const dateStr = instance.date;
+              
+              if (!recurringPayments[dateStr]) {
+                recurringPayments[dateStr] = [];
+              }
+              
+              recurringPayments[dateStr].push({
+                id: instanceDoc.id,
+                templateId: doc.id,
+                ...template,
+                date: new Date(dateStr)
+              });
+            });
+          }
+          
+          paymentsData = { ...paymentsData, ...recurringPayments };
+          generateCalendar(currentMonth, currentYear);
+        });
+
+        // Сохраняем функции отписки
+        unsubscribePayments = () => {
+          unsubscribeOneTime();
+          unsubscribeRecurring();
+        };
+
+      } catch (error) {
+        console.error('Error in initCalendar:', error);
+        showError('Ошибка при инициализации календаря');
+      }
     }
 
     function generateCalendar(month, year) {
@@ -740,7 +775,10 @@
         document.getElementById('authErrorContainer').classList.add('hidden');
         document.getElementById('appContainer').classList.remove('hidden');
         
-        // Инициализируем тему до календаря
+        // Создаем структуру базы данных
+        await createDatabaseStructure();
+        
+        // Инициализируем тему
         initTheme();
         
         // Инициализируем календарь
@@ -845,7 +883,7 @@
           await addDoc(collection(db, "payments/one_time/items"), {
             amount: amount,
             description: description,
-            date: Timestamp.fromDate(selectedDate),
+            date: Timestamp.fromDate(new Date(selectedDate)),
             userId: currentUserId,
             createdAt: Timestamp.now(),
             paymentType: 'one-time'
@@ -854,7 +892,7 @@
           const templateRef = await addDoc(collection(db, "payments/recurring/items"), {
             amount: amount,
             description: description,
-            startDate: Timestamp.fromDate(selectedDate),
+            startDate: Timestamp.fromDate(new Date(selectedDate)),
             userId: currentUserId,
             createdAt: Timestamp.now(),
             paymentType: 'recurring'
