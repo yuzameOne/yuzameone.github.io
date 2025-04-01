@@ -342,7 +342,9 @@
       where, 
       onSnapshot,
       getDoc,
-      orderBy
+      orderBy,
+      Timestamp,
+      subcollection
     } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
 
     // Конфигурация Firebase
@@ -510,59 +512,87 @@
       });
     }
 
-    function initCalendar() {
+    // Инициализация календаря
+    async function initCalendar() {
       console.log('Initializing calendar...');
-      const paymentsRef = collection(db, "payments");
-      const q = query(
-        paymentsRef, 
+      const currentDate = new Date();
+      currentMonth = currentDate.getMonth();
+      currentYear = currentDate.getFullYear();
+      
+      console.log('Setting up Firebase listeners...');
+      
+      // Слушатель для разовых платежей
+      const oneTimeQuery = query(
+        collection(db, "payments/one_time"),
         where("userId", "==", currentUserId),
         orderBy("date", "asc")
       );
       
-      console.log('Setting up Firebase listener...');
-      unsubscribePayments = onSnapshot(q, (querySnapshot) => {
-        console.log('Received payment data from Firebase');
-        paymentsData = {};
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          console.log('Processing payment:', data);
-          const date = data.date.toDate();
+      // Слушатель для повторяющихся платежей
+      const recurringQuery = query(
+        collection(db, "payments/recurring"),
+        where("userId", "==", currentUserId)
+      );
+
+      // Обработчик разовых платежей
+      onSnapshot(oneTimeQuery, (snapshot) => {
+        console.log('Received one-time payment data from Firebase');
+        const paymentsData = {};
+        
+        snapshot.forEach((doc) => {
+          const payment = doc.data();
+          const date = payment.date.toDate();
+          const dateStr = formatDate(date);
           
-          if (data.paymentType === 'one-time') {
-            const dateString = formatDate(date);
-            if (!paymentsData[dateString]) paymentsData[dateString] = [];
-            paymentsData[dateString].push({
-              amount: data.amount,
-              description: data.description || '',
-              paymentType: data.paymentType,
-              category: data.category || 'other',
-              id: doc.id
-            });
-          } else {
-            let currentDate = new Date(date);
-            const today = new Date();
-            const futureDate = new Date(today.getFullYear(), today.getMonth() + 12, 1);
-            
-            while (currentDate <= futureDate) {
-              const dateString = formatDate(currentDate);
-              if (!paymentsData[dateString]) paymentsData[dateString] = [];
-              paymentsData[dateString].push({
-                amount: data.amount,
-                description: data.description || '',
-                paymentType: data.paymentType,
-                category: data.category || 'other',
-                id: doc.id,
-                originalDate: formatDate(date)
-              });
-              currentDate.setMonth(currentDate.getMonth() + 1);
-            }
+          if (!paymentsData[dateStr]) {
+            paymentsData[dateStr] = [];
           }
+          
+          paymentsData[dateStr].push({
+            id: doc.id,
+            ...payment,
+            date: date
+          });
         });
         
-        console.log('Processed payments data:', paymentsData);
+        console.log('Processed one-time payments:', paymentsData);
+        window.paymentsData = paymentsData;
         generateCalendar(currentMonth, currentYear);
       }, (error) => {
-        console.error('Error in Firebase listener:', error);
+        console.error('Error in one-time payments listener:', error);
+      });
+
+      // Обработчик повторяющихся платежей
+      onSnapshot(recurringQuery, async (snapshot) => {
+        console.log('Received recurring payment data from Firebase');
+        const recurringPayments = {};
+        
+        for (const doc of snapshot.docs) {
+          const template = doc.data();
+          const instancesSnapshot = await getDocs(collection(doc.ref, "instances"));
+          
+          instancesSnapshot.forEach((instanceDoc) => {
+            const instance = instanceDoc.data();
+            const dateStr = instance.date;
+            
+            if (!recurringPayments[dateStr]) {
+              recurringPayments[dateStr] = [];
+            }
+            
+            recurringPayments[dateStr].push({
+              id: instanceDoc.id,
+              templateId: doc.id,
+              ...template,
+              date: new Date(dateStr)
+            });
+          });
+        }
+        
+        console.log('Processed recurring payments:', recurringPayments);
+        window.recurringPayments = recurringPayments;
+        generateCalendar(currentMonth, currentYear);
+      }, (error) => {
+        console.error('Error in recurring payments listener:', error);
       });
     }
 
@@ -700,63 +730,96 @@
         `Добавить платеж на ${formatDisplayDate(selectedDate)}`;
     }
 
-    async function deletePayment(paymentId) {
+    async function deletePayment(paymentId, isRecurring = false) {
       try {
-        const paymentDoc = await getDoc(doc(db, "payments", paymentId));
-        const paymentData = paymentDoc.data();
-        
-        if (paymentData.paymentType === 'recurring') {
-          if (confirm('Это постоянный платеж. Удалить его во всех месяцах?')) {
-            await deleteDoc(doc(db, "payments", paymentId));
-          }
+        if (isRecurring) {
+          // Удаляем шаблон повторяющегося платежа
+          await deleteDoc(doc(db, "payments/recurring", paymentId));
         } else {
-          await deleteDoc(doc(db, "payments", paymentId));
+          // Удаляем разовый платеж
+          await deleteDoc(doc(db, "payments/one_time", paymentId));
         }
+        closeModal('deletePaymentModal');
+        showSuccess('Платеж успешно удален');
       } catch (error) {
-        console.error("Error deleting payment: ", error);
-        alert("Ошибка при удалении платежа");
+        console.error('Error deleting payment:', error);
+        showError('Ошибка при удалении платежа');
       }
     }
 
-    function showDeleteList() {
+    async function showDeleteList() {
       hideAllForms();
-      const container = document.getElementById('paymentsToDelete');
-      container.innerHTML = '';
+      const deleteList = document.getElementById('paymentsToDelete');
+      deleteList.innerHTML = '';
       
-      const dateString = formatDate(selectedDate);
-      const payments = paymentsData[dateString] || [];
-      
-      if (payments.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-4">Нет платежей для удаления</p>';
-      } else {
-        payments.forEach(payment => {
-          const paymentEl = document.createElement('div');
-          paymentEl.className = 'payment-item';
-          const isRecurring = payment.paymentType === 'recurring';
-          const category = categories[payment.category || 'other'];
-          paymentEl.innerHTML = `
-            <span>
-              ${payment.amount} ₽${payment.description ? ` - ${payment.description}` : ''}
-              <span class="category-badge" style="background-color: ${category.color}20; color: ${category.color}">
-                ${category.name}
-              </span>
-              ${isRecurring ? '<span class="text-xs text-green-600">(постоянный)</span>' : ''}
-            </span>
-            <button class="delete-btn px-2 py-1 rounded hover:bg-red-100 dark:hover:bg-red-900 transition" 
-                    data-id="${payment.id}" 
-                    data-type="${payment.paymentType}">
-              Удалить
+      try {
+        // Получаем разовые платежи
+        const oneTimeSnapshot = await getDocs(query(
+          collection(db, "payments/one_time"),
+          where("userId", "==", currentUserId),
+          orderBy("date", "desc")
+        ));
+        
+        // Получаем повторяющиеся платежи
+        const recurringSnapshot = await getDocs(query(
+          collection(db, "payments/recurring"),
+          where("userId", "==", currentUserId)
+        ));
+        
+        if (oneTimeSnapshot.empty && recurringSnapshot.empty) {
+          deleteList.innerHTML = '<p class="text-gray-500">Нет платежей для удаления</p>';
+          return;
+        }
+        
+        // Добавляем разовые платежи
+        oneTimeSnapshot.forEach((doc) => {
+          const payment = doc.data();
+          const date = payment.date.toDate();
+          const dateStr = formatDate(date);
+          
+          const paymentElement = document.createElement('div');
+          paymentElement.className = 'flex items-center justify-between p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded';
+          paymentElement.innerHTML = `
+            <div>
+              <div class="font-medium">${payment.description}</div>
+              <div class="text-sm text-gray-500">${formatCurrency(payment.amount)} • ${dateStr}</div>
+            </div>
+            <button onclick="deletePayment('${doc.id}', false)" class="text-red-500 hover:text-red-700">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+              </svg>
             </button>
           `;
-          container.appendChild(paymentEl);
+          deleteList.appendChild(paymentElement);
         });
         
-        document.querySelectorAll('.delete-btn').forEach(btn => {
-          btn.addEventListener('click', () => deletePayment(btn.dataset.id));
+        // Добавляем повторяющиеся платежи
+        recurringSnapshot.forEach((doc) => {
+          const payment = doc.data();
+          const date = payment.startDate.toDate();
+          const dateStr = formatDate(date);
+          
+          const paymentElement = document.createElement('div');
+          paymentElement.className = 'flex items-center justify-between p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded';
+          paymentElement.innerHTML = `
+            <div>
+              <div class="font-medium">${payment.description} (Повторяющийся)</div>
+              <div class="text-sm text-gray-500">${formatCurrency(payment.amount)} • ${dateStr}</div>
+            </div>
+            <button onclick="deletePayment('${doc.id}', true)" class="text-red-500 hover:text-red-700">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+              </svg>
+            </button>
+          `;
+          deleteList.appendChild(paymentElement);
         });
+        
+        openModal('deletePaymentModal');
+      } catch (error) {
+        console.error('Error loading payments for deletion:', error);
+        showError('Ошибка при загрузке платежей');
       }
-      
-      document.getElementById('deletePaymentsList').classList.remove('hidden');
     }
 
     function showDescriptions() {
