@@ -267,19 +267,6 @@
               <input type="text" id="description" class="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
             </div>
             <div class="mb-4">
-              <label class="block text-gray-700 dark:text-gray-300 mb-2" for="category">Категория</label>
-              <select id="category" class="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                <option value="other">Другое</option>
-                <option value="food">Продукты</option>
-                <option value="transport">Транспорт</option>
-                <option value="utilities">Коммунальные услуги</option>
-                <option value="entertainment">Развлечения</option>
-                <option value="health">Здоровье</option>
-                <option value="education">Образование</option>
-                <option value="shopping">Покупки</option>
-              </select>
-            </div>
-            <div class="mb-4">
               <label class="block text-gray-700 dark:text-gray-300 mb-2">Тип платежа</label>
               <div class="flex border rounded overflow-hidden">
                 <div id="oneTimeOption" class="toggle-option flex-1 active" data-value="one-time">
@@ -382,17 +369,6 @@
       'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
       'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
     ];
-
-    const categories = {
-      other: { name: 'Другое', color: '#6B7280' },
-      food: { name: 'Продукты', color: '#10B981' },
-      transport: { name: 'Транспорт', color: '#3B82F6' },
-      utilities: { name: 'Коммунальные услуги', color: '#F59E0B' },
-      entertainment: { name: 'Развлечения', color: '#8B5CF6' },
-      health: { name: 'Здоровье', color: '#EF4444' },
-      education: { name: 'Образование', color: '#EC4899' },
-      shopping: { name: 'Покупки', color: '#14B8A6' }
-    };
 
     // Функции аутентификации
     function checkAuth() {
@@ -837,14 +813,10 @@
           const paymentEl = document.createElement('div');
           paymentEl.className = 'payment-item';
           const isRecurring = payment.paymentType === 'recurring';
-          const category = categories[payment.category || 'other'];
           paymentEl.innerHTML = `
             <div class="w-full">
               <div class="font-medium">
                 ${payment.amount} ₽ 
-                <span class="category-badge" style="background-color: ${category.color}20; color: ${category.color}">
-                  ${category.name}
-                </span>
                 <span class="text-xs ${isRecurring ? 'text-green-600' : 'text-red-600'}">
                   (${isRecurring ? 'постоянный' : 'разовый'})
                 </span>
@@ -958,18 +930,39 @@
       const amount = parseFloat(document.getElementById('amount').value);
       const description = document.getElementById('description').value;
       const paymentType = document.getElementById('paymentType').value;
-      const category = document.getElementById('category').value;
       
       try {
-        await addDoc(collection(db, "payments"), {
-          amount: amount,
-          description: description,
-          paymentType: paymentType,
-          category: category,
-          date: selectedDate,
-          userId: currentUserId,
-          createdAt: new Date()
-        });
+        if (paymentType === 'one-time') {
+          await addDoc(collection(db, "payments/one_time/items"), {
+            amount: amount,
+            description: description,
+            date: Timestamp.fromDate(selectedDate),
+            userId: currentUserId,
+            createdAt: Timestamp.now()
+          });
+        } else {
+          const templateRef = await addDoc(collection(db, "payments/recurring/items"), {
+            amount: amount,
+            description: description,
+            startDate: Timestamp.fromDate(selectedDate),
+            userId: currentUserId,
+            createdAt: Timestamp.now()
+          });
+
+          // Создаем экземпляры на 12 месяцев
+          const startDate = new Date(selectedDate);
+          const endDate = new Date(startDate);
+          endDate.setMonth(endDate.getMonth() + 12);
+          
+          let currentDate = new Date(startDate);
+          while (currentDate <= endDate) {
+            await addDoc(collection(templateRef, "instances"), {
+              date: formatDate(currentDate),
+              userId: currentUserId
+            });
+            currentDate.setMonth(currentDate.getMonth() + 1);
+          }
+        }
         
         document.getElementById('paymentForm').reset();
         hideOverlay();
