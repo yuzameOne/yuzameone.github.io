@@ -235,7 +235,8 @@
       doc, 
       query, 
       where, 
-      onSnapshot
+      onSnapshot,
+      getDoc
     } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
 
     // Конфигурация Firebase
@@ -338,21 +339,43 @@
 
     function initCalendar() {
       const paymentsRef = collection(db, "payments");
+      const q = query(paymentsRef, where("userId", "==", currentUserId));
       
-      // Загружаем платежи всех пользователей
-      unsubscribePayments = onSnapshot(paymentsRef, (querySnapshot) => {
+      unsubscribePayments = onSnapshot(q, (querySnapshot) => {
         paymentsData = {};
         querySnapshot.forEach((doc) => {
           const data = doc.data();
           const date = data.date.toDate();
-          const dateString = formatDate(date);
-          if (!paymentsData[dateString]) paymentsData[dateString] = [];
-          paymentsData[dateString].push({
-            amount: data.amount,
-            description: data.description || '',
-            paymentType: data.paymentType,
-            id: doc.id
-          });
+          
+          if (data.paymentType === 'one-time') {
+            // Для разовых платежей - добавляем только на конкретную дату
+            const dateString = formatDate(date);
+            if (!paymentsData[dateString]) paymentsData[dateString] = [];
+            paymentsData[dateString].push({
+              amount: data.amount,
+              description: data.description || '',
+              paymentType: data.paymentType,
+              id: doc.id
+            });
+          } else {
+            // Для постоянных платежей - добавляем на все последующие даты
+            let currentDate = new Date(date);
+            const today = new Date();
+            const futureDate = new Date(today.getFullYear(), today.getMonth() + 12, 1);
+            
+            while (currentDate < futureDate) {
+              const dateString = formatDate(currentDate);
+              if (!paymentsData[dateString]) paymentsData[dateString] = [];
+              paymentsData[dateString].push({
+                amount: data.amount,
+                description: data.description || '',
+                paymentType: data.paymentType,
+                id: doc.id,
+                originalDate: formatDate(date)
+              });
+              currentDate.setMonth(currentDate.getMonth() + 1);
+            }
+          }
         });
         
         generateCalendar(currentMonth, currentYear);
@@ -464,6 +487,24 @@
         `Добавить платеж на ${formatDisplayDate(selectedDate)}`;
     }
 
+    async function deletePayment(paymentId) {
+      try {
+        const paymentDoc = await getDoc(doc(db, "payments", paymentId));
+        const paymentData = paymentDoc.data();
+        
+        if (paymentData.paymentType === 'recurring') {
+          if (confirm('Это постоянный платеж. Удалить его во всех месяцах?')) {
+            await deleteDoc(doc(db, "payments", paymentId));
+          }
+        } else {
+          await deleteDoc(doc(db, "payments", paymentId));
+        }
+      } catch (error) {
+        console.error("Error deleting payment: ", error);
+        alert("Ошибка при удалении платежа");
+      }
+    }
+
     function showDeleteList() {
       hideAllForms();
       const container = document.getElementById('paymentsToDelete');
@@ -478,10 +519,15 @@
         payments.forEach(payment => {
           const paymentEl = document.createElement('div');
           paymentEl.className = 'payment-item';
-          paymentEl.dataset.id = payment.id;
+          const isRecurring = payment.paymentType === 'recurring';
           paymentEl.innerHTML = `
-            <span>${payment.amount} ₽${payment.description ? ` - ${payment.description}` : ''}</span>
-            <button class="delete-btn px-2 py-1 rounded hover:bg-red-100 transition" data-id="${payment.id}">
+            <span>
+              ${payment.amount} ₽${payment.description ? ` - ${payment.description}` : ''}
+              ${isRecurring ? '<span class="text-xs text-green-600">(постоянный)</span>' : ''}
+            </span>
+            <button class="delete-btn px-2 py-1 rounded hover:bg-red-100 transition" 
+                    data-id="${payment.id}" 
+                    data-type="${payment.paymentType}">
               Удалить
             </button>
           `;
@@ -489,23 +535,7 @@
         });
         
         document.querySelectorAll('.delete-btn').forEach(btn => {
-          btn.addEventListener('click', async function() {
-            const paymentId = this.dataset.id;
-            try {
-              await deleteDoc(doc(db, "payments", paymentId));
-              // Удаляем строку из интерфейса
-              const paymentItem = this.closest('.payment-item');
-              paymentItem.remove();
-              
-              // Если платежей больше нет, показываем сообщение
-              if (container.children.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-center py-4">Нет платежей для удаления</p>';
-              }
-            } catch (error) {
-              console.error("Error deleting payment: ", error);
-              alert("Ошибка при удалении платежа");
-            }
-          });
+          btn.addEventListener('click', () => deletePayment(btn.dataset.id));
         });
       }
       
@@ -526,10 +556,17 @@
         payments.forEach(payment => {
           const paymentEl = document.createElement('div');
           paymentEl.className = 'payment-item';
+          const isRecurring = payment.paymentType === 'recurring';
           paymentEl.innerHTML = `
             <div class="w-full">
-              <div class="font-medium">${payment.amount} ₽ <span class="text-xs ${payment.paymentType === 'recurring' ? 'text-green-600' : 'text-red-600'}">(${payment.paymentType === 'recurring' ? 'постоянный' : 'разовый'})</span></div>
+              <div class="font-medium">
+                ${payment.amount} ₽ 
+                <span class="text-xs ${isRecurring ? 'text-green-600' : 'text-red-600'}">
+                  (${isRecurring ? 'постоянный' : 'разовый'})
+                </span>
+              </div>
               ${payment.description ? `<div class="text-sm text-gray-600 mt-1">${payment.description}</div>` : ''}
+              ${payment.originalDate ? `<div class="text-xs text-gray-500">Создан: ${payment.originalDate}</div>` : ''}
             </div>
           `;
           container.appendChild(paymentEl);
