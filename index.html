@@ -138,13 +138,13 @@
             left: 25%;
             width: 50%;
             height: 2px;
-            background-color: #3B82F6;
+            background-color: #E53E3E;  /* Красное подчеркивание */
             transition: all 0.3s ease;
         }
         
         #showPaymentDetailsBtn:hover:after {
             width: 70%;
-            background-color: #2563EB;
+            background-color: #C53030;
         }
         
         #paymentDetailsList {
@@ -158,6 +158,21 @@
             justify-content: space-between;
             border-bottom: 1px dashed rgba(0, 0, 0, 0.1);
             font-size: 0.875rem;
+            min-height: 30px;
+            align-items: center;
+        }
+        
+        .payment-details-item span:first-child {
+            flex: 1;
+            margin-right: 10px;
+            word-break: break-word;
+            line-height: 1.3;
+        }
+        
+        .payment-details-item span:last-child {
+            flex: 0 0 auto;
+            white-space: nowrap;
+            font-weight: 500;
         }
         
         .payment-details-total {
@@ -217,16 +232,16 @@
                 </button>
                 <div id="paymentDetailsList" class="hidden p-4 bg-gray-50">
                     <div class="grid grid-cols-2 gap-4">
-                        <div class="bg-blue-100 p-3 rounded-lg">
-                            <h3 class="text-blue-800 font-semibold mb-2">Разовые платежи</h3>
+                        <div class="bg-red-100 p-3 rounded-lg">
+                            <h3 class="text-red-800 font-semibold mb-2">Разовые платежи</h3>
                             <div id="oneTimePaymentsList">
-                                <p class="text-blue-700 font-bold">0 ₽</p>
+                                <p class="text-red-700 font-bold">0</p>
                             </div>
                         </div>
                         <div class="bg-green-100 p-3 rounded-lg">
                             <h3 class="text-green-800 font-semibold mb-2">Постоянные платежи</h3>
                             <div id="recurringPaymentsList">
-                                <p class="text-green-700 font-bold">0 ₽</p>
+                                <p class="text-green-700 font-bold">0</p>
                             </div>
                         </div>
                     </div>
@@ -1230,41 +1245,60 @@
                 });
             });
             
+            // Собираем платежи по типам для сортировки
+            const oneTimePayments = [];
+            const recurringPayments = [];
+            
             // Обрабатываем платежи для отображения
             Object.entries(monthPaymentsData).forEach(([dateString, payments]) => {
                 payments.forEach(payment => {
                     const amount = Number(payment.amount) || 0;
-                    const day = new Date(dateString).getDate();
+                    const date = new Date(dateString);
+                    const day = date.getDate();
+                    
+                    const formattedDate = `${day} ${months[currentMonth].toLowerCase()}`;
+                    const description = payment.description || 'Платеж';
                     
                     if (payment.paymentType === 'one-time') {
                         // Разовый платеж
                         oneTimeTotal += amount;
-                        
-                        const paymentItem = document.createElement('div');
-                        paymentItem.className = 'payment-details-item';
-                        paymentItem.innerHTML = `
-                            <span>${day} ${months[currentMonth].toLowerCase()}: ${payment.description || 'Платеж'}</span>
-                            <span>${amount.toLocaleString()}</span>
-                        `;
-                        oneTimeContainer.appendChild(paymentItem);
+                        oneTimePayments.push({ date, formattedDate, description, amount });
                     } else {
                         // Повторяющийся платеж
                         recurringTotal += amount;
-                        
-                        const paymentItem = document.createElement('div');
-                        paymentItem.className = 'payment-details-item';
-                        paymentItem.innerHTML = `
-                            <span>${day} ${months[currentMonth].toLowerCase()}: ${payment.description || 'Платеж'}</span>
-                            <span>${amount.toLocaleString()}</span>
-                        `;
-                        recurringContainer.appendChild(paymentItem);
+                        recurringPayments.push({ date, formattedDate, description, amount });
                     }
                 });
             });
             
+            // Сортируем платежи по дате
+            oneTimePayments.sort((a, b) => a.date - b.date);
+            recurringPayments.sort((a, b) => a.date - b.date);
+            
+            // Добавляем платежи в контейнеры
+            oneTimePayments.forEach(payment => {
+                const paymentItem = document.createElement('div');
+                paymentItem.className = 'payment-details-item';
+                paymentItem.innerHTML = `
+                    <span>${payment.formattedDate}: ${payment.description}</span>
+                    <span>${payment.amount.toLocaleString()}</span>
+                `;
+                oneTimeContainer.appendChild(paymentItem);
+            });
+            
+            recurringPayments.forEach(payment => {
+                const paymentItem = document.createElement('div');
+                paymentItem.className = 'payment-details-item';
+                paymentItem.innerHTML = `
+                    <span>${payment.formattedDate}: ${payment.description}</span>
+                    <span>${payment.amount.toLocaleString()}</span>
+                `;
+                recurringContainer.appendChild(paymentItem);
+            });
+            
             // Добавляем итоговые суммы
-            if (oneTimeContainer.children.length === 0) {
-                oneTimeContainer.innerHTML = '<p class="text-blue-700 font-bold">0</p>';
+            if (oneTimePayments.length === 0) {
+                oneTimeContainer.innerHTML = '<p class="text-red-700 font-bold">0</p>';
             } else {
                 const totalEl = document.createElement('div');
                 totalEl.className = 'payment-details-total';
@@ -1272,7 +1306,7 @@
                 oneTimeContainer.appendChild(totalEl);
             }
             
-            if (recurringContainer.children.length === 0) {
+            if (recurringPayments.length === 0) {
                 recurringContainer.innerHTML = '<p class="text-green-700 font-bold">0</p>';
             } else {
                 const totalEl = document.createElement('div');
