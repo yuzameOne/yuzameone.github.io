@@ -382,12 +382,10 @@
         // Инициализация Firebase
         async function initFirebase() {
             try {
-                console.log('Initializing Firebase...');
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 return true;
             } catch (error) {
-                console.error('Firebase initialization error:', error);
                 alert('Ошибка подключения к базе данных: ' + error.message);
                 return false;
             }
@@ -397,16 +395,11 @@
         const ALLOWED_USER_IDS = [
             "564940168",
             "579486395"
+            
         ];
 
         // Функции аутентификации
         function checkAuth() {
-            // Временное разрешение для тестирования без Telegram
-            currentUserId = "579486395";
-            return true;
-
-            // Закомментированный оригинальный код
-            /*
             try {
                 const tg = window.Telegram.WebApp;
                 
@@ -428,7 +421,6 @@
                 showAuthError("Ошибка авторизации");
                 return false;
             }
-            */
         }
 
         function showAuthError(message) {
@@ -519,13 +511,11 @@
 
             // Устанавливаем новые слушатели
             const unsubscribeOneTime = onSnapshot(oneTimeItemsRef, (snapshot) => {
-                console.log('One-time payments updated');
                 updateNeeded = true;
                 debouncedUpdate();
             });
 
             const unsubscribeRecurring = onSnapshot(recurringItemsRef, (snapshot) => {
-                console.log('Recurring payments updated');
                 updateNeeded = true;
                 debouncedUpdate();
             });
@@ -542,13 +532,11 @@
 
         async function initCalendar() {
             try {
-                console.log('Starting calendar initialization...');
                 const newPaymentsData = {};
 
                 // Получаем разовые платежи
                 const oneTimeItemsRef = collection(db, "payments/one_time/items");
                 const oneTimeSnapshot = await getDocs(oneTimeItemsRef);
-                console.log('Found one-time payments:', oneTimeSnapshot.size);
 
                 // Обрабатываем разовые платежи
                 oneTimeSnapshot.forEach((doc) => {
@@ -574,7 +562,6 @@
                 // Получаем повторяющиеся платежи
                 const recurringItemsRef = collection(db, "payments/recurring/items");
                 const recurringSnapshot = await getDocs(recurringItemsRef);
-                console.log('Found recurring payments:', recurringSnapshot.size);
 
                 // Обрабатываем повторяющиеся платежи
                 for (const doc of recurringSnapshot.docs) {
@@ -624,18 +611,15 @@
 
                 // Обновляем данные только после полной обработки
                 paymentsData = newPaymentsData;
-                console.log('Processed payments data:', paymentsData);
                 generateCalendar(currentMonth, currentYear);
 
             } catch (error) {
-                console.error('Error in initCalendar:', error);
                 alert('Ошибка инициализации календаря: ' + error.message);
             }
         }
 
         function generateCalendar(month, year) {
             try {
-                console.log('Generating calendar for:', months[month], year);
                 const calendarDays = document.getElementById('calendarDays');
                 const currentMonthElement = document.getElementById('currentMonth');
                 
@@ -726,7 +710,6 @@
                 }
                 
             } catch (error) {
-                console.error('Error in generateCalendar:', error);
                 alert('Ошибка генерации календаря: ' + error.message);
             }
         }
@@ -925,7 +908,6 @@
                                 container.innerHTML = '<p class="text-gray-500 text-center py-4">Нет платежей для удаления</p>';
                             }
                         } catch (error) {
-                            console.error("Error deleting payment: ", error);
                             alert("Ошибка при удалении платежа: " + error.message);
                         }
                     });
@@ -1041,8 +1023,6 @@
         // Инициализация приложения
         async function initApp() {
             try {
-                console.log('Starting app initialization...');
-                
                 // Показываем контейнер приложения
                 const appContainer = document.getElementById('appContainer');
                 if (!appContainer) {
@@ -1061,30 +1041,25 @@
                 
                 // Проверяем авторизацию
                 if (!checkAuth()) {
-                    console.error('Auth check failed');
                     return;
                 }
                 
-                console.log('Auth check passed, initializing calendar...');
                 await initCalendar();
                 
                 // Устанавливаем слушатели только один раз при инициализации
                 setupPaymentListeners();
                 
             } catch (error) {
-                console.error('Error during app initialization:', error);
                 alert('Ошибка инициализации приложения: ' + error.message);
             }
         }
 
         // Обработчики событий
         window.addEventListener('load', () => {
-            console.log('Window loaded');
             initApp();
         });
 
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('DOM Content Loaded');
             initApp();
         });
 
@@ -1157,7 +1132,6 @@
                 document.getElementById('paymentForm').reset();
                 hideOverlay();
             } catch (error) {
-                console.error("Error adding payment: ", error);
                 alert("Ошибка при добавлении платежа: " + error.message);
             }
         });
@@ -1185,8 +1159,6 @@
 
         // Функция для обновления деталей платежей
         function updatePaymentDetails() {
-            console.log('Updating payment details for month:', months[currentMonth], currentYear);
-            
             // Контейнеры для списков платежей
             const oneTimeContainer = document.getElementById('oneTimePaymentsList');
             const recurringContainer = document.getElementById('recurringPaymentsList');
