@@ -116,6 +116,57 @@
             border-radius: 0.5rem;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
+
+        /* Стили для деталей платежей */
+        .payment-details {
+            background-color: #f8fafc;
+            border-bottom-left-radius: 0.5rem;
+            border-bottom-right-radius: 0.5rem;
+        }
+        
+        #showPaymentDetailsBtn {
+            position: relative;
+            width: 100%;
+            text-align: center;
+            padding-bottom: 0.75rem;
+        }
+        
+        #showPaymentDetailsBtn:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 25%;
+            width: 50%;
+            height: 2px;
+            background-color: #3B82F6;
+            transition: all 0.3s ease;
+        }
+        
+        #showPaymentDetailsBtn:hover:after {
+            width: 70%;
+            background-color: #2563EB;
+        }
+        
+        #paymentDetailsList {
+            border-top: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+        
+        .payment-details-item {
+            padding: 6px 0;
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px dashed rgba(0, 0, 0, 0.1);
+            font-size: 0.875rem;
+        }
+        
+        .payment-details-total {
+            margin-top: 10px;
+            padding-top: 10px;
+            font-weight: bold;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            text-align: right;
+        }
     </style>
 </head>
 <body>
@@ -156,7 +207,30 @@
             <div id="calendarDays" class="grid grid-cols-7 gap-1 p-2"></div>
 
             <div class="month-total">
-                Итого за месяц: <span id="monthTotal">0</span> ₽
+                Итого за месяц: <span id="monthTotal">0</span>
+            </div>
+
+            <!-- Кнопка и блок для детализации платежей -->
+            <div class="payment-details">
+                <button id="showPaymentDetailsBtn" class="text-blue-500 hover:text-blue-700 font-medium py-2 w-full transition focus:outline-none">
+                    Детали платежей
+                </button>
+                <div id="paymentDetailsList" class="hidden p-4 bg-gray-50">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-blue-100 p-3 rounded-lg">
+                            <h3 class="text-blue-800 font-semibold mb-2">Разовые платежи</h3>
+                            <div id="oneTimePaymentsList">
+                                <p class="text-blue-700 font-bold">0 ₽</p>
+                            </div>
+                        </div>
+                        <div class="bg-green-100 p-3 rounded-lg">
+                            <h3 class="text-green-800 font-semibold mb-2">Постоянные платежи</h3>
+                            <div id="recurringPaymentsList">
+                                <p class="text-green-700 font-bold">0 ₽</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -561,23 +635,23 @@
                 Object.entries(paymentsData).forEach(([dateString, payments]) => {
                     const paymentDate = new Date(dateString);
                     if (paymentDate.getMonth() === month && paymentDate.getFullYear() === year) {
-                        monthPaymentsData[dateString] = payments;
+                        // Копируем платежи без дублирования
+                        monthPaymentsData[dateString] = [...payments];
                     }
                 });
                 
                 // Добавляем повторяющиеся платежи
                 Object.entries(paymentsData).forEach(([dateString, payments]) => {
-                    const paymentDate = new Date(dateString);
                     payments.forEach(payment => {
                         if (payment.paymentType === 'recurring') {
-                            // Получаем день месяца из оригинального платежа
+                            const paymentDate = new Date(dateString);
                             const paymentDay = paymentDate.getDate();
                             
                             // Создаем дату для текущего месяца с тем же днем
                             const newDate = new Date(year, month, paymentDay);
                             
-                            // Проверяем, что дата действительна и больше или равна начальной дате
-                            if (!isNaN(newDate.getTime()) && newDate >= paymentDate) {
+                            // Проверяем только валидность даты
+                            if (!isNaN(newDate.getTime())) {
                                 const newDateString = formatDate(newDate);
                                 
                                 if (!monthPaymentsData[newDateString]) {
@@ -585,14 +659,19 @@
                                 }
                                 
                                 // Проверяем, не существует ли уже такой платеж
-                                const existingPayment = monthPaymentsData[newDateString].find(p => 
+                                const existingPayment = monthPaymentsData[newDateString].some(p => 
                                     p.id === payment.id && p.paymentType === 'recurring'
                                 );
                                 
                                 if (!existingPayment) {
+                                    // Добавляем информацию о том, является ли это будущим или прошлым платежом
+                                    const isPast = newDate < paymentDate;
                                     monthPaymentsData[newDateString].push({
                                         ...payment,
-                                        isRecurring: true // Маркер для повторяющегося платежа
+                                        amount: Number(payment.amount) || 0,
+                                        isRecurring: true,
+                                        isPast,
+                                        originalDate: paymentDate
                                     });
                                 }
                             }
@@ -625,6 +704,12 @@
                 
                 calculateMonthTotal();
                 
+                // Если детали платежей открыты - обновляем их
+                const detailsList = document.getElementById('paymentDetailsList');
+                if (!detailsList.classList.contains('hidden')) {
+                    updatePaymentDetails();
+                }
+                
             } catch (error) {
                 console.error('Error in generateCalendar:', error);
                 alert('Ошибка генерации календаря: ' + error.message);
@@ -656,9 +741,16 @@
             if (payments.length > 0) {
                 const totalAmount = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
                 const hasRecurring = payments.some(p => p.paymentType === 'recurring');
+                const hasPastRecurring = payments.some(p => p.isPast);
+                
+                let colorClass = 'text-red-600';
+                if (hasRecurring) {
+                    colorClass = hasPastRecurring ? 'text-blue-600' : 'text-green-600';
+                }
+                
                 paymentDisplay = `
-                    <div class="payment-amount text-xs font-medium ${hasRecurring ? 'text-green-600' : 'text-red-600'}">
-                        ${totalAmount.toLocaleString()} ₽
+                    <div class="payment-amount text-xs font-medium ${colorClass}">
+                        ${totalAmount.toLocaleString()}
                     </div>
                 `;
             } else {
@@ -710,40 +802,116 @@
             container.innerHTML = '';
             
             const dateString = formatDate(selectedDate);
-            const payments = paymentsData[dateString] || [];
             
-            if (payments.length === 0) {
+            // Получаем обычные платежи для выбранной даты
+            const regularPayments = paymentsData[dateString] || [];
+            
+            // Получаем повторяющиеся платежи из предыдущих месяцев
+            const recurringPayments = [];
+            Object.entries(paymentsData).forEach(([paymentDateString, payments]) => {
+                const paymentDate = new Date(paymentDateString);
+                payments.forEach(payment => {
+                    if (payment.paymentType === 'recurring') {
+                        const paymentDay = paymentDate.getDate();
+                        
+                        if (paymentDay === selectedDate.getDate() && 
+                            (paymentDate.getMonth() !== selectedDate.getMonth() || 
+                             paymentDate.getFullYear() !== selectedDate.getFullYear())) {
+                            
+                            if (selectedDate >= paymentDate) {
+                                const isAlreadyAdded = regularPayments.some(p => 
+                                    p.id === payment.id && p.paymentType === 'recurring'
+                                );
+                                
+                                if (!isAlreadyAdded) {
+                                    recurringPayments.push({
+                                        ...payment,
+                                        originalDate: paymentDate,
+                                        isRecurring: true
+                                    });
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+            
+            const allPayments = [...regularPayments, ...recurringPayments];
+            
+            if (allPayments.length === 0) {
                 container.innerHTML = '<p class="text-gray-500 text-center py-4">Нет платежей для удаления</p>';
             } else {
-                payments.forEach(payment => {
+                // Сортируем платежи: сначала разовые, потом повторяющиеся
+                allPayments.sort((a, b) => {
+                    if (a.paymentType === b.paymentType) {
+                        return 0;
+                    }
+                    return a.paymentType === 'one-time' ? -1 : 1;
+                });
+
+                allPayments.forEach(payment => {
                     const paymentEl = document.createElement('div');
-                    paymentEl.className = 'payment-item';
-                    paymentEl.dataset.id = payment.id;
+                    paymentEl.className = 'payment-item flex justify-between items-center p-3 border-b border-gray-200';
+                    
+                    const isRecurring = payment.paymentType === 'recurring';
+                    
                     paymentEl.innerHTML = `
-                        <span>${payment.amount} ₽${payment.description ? ` - ${payment.description}` : ''}</span>
-                        <button class="delete-btn px-2 py-1 rounded hover:bg-red-100 transition" data-id="${payment.id}">
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-medium">${payment.amount.toLocaleString()}</span>
+                            </div>
+                            ${payment.description ? `
+                                <div class="text-sm text-gray-600">
+                                    ${payment.description}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <button class="delete-btn ml-4 px-3 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors" 
+                                data-id="${payment.id}" 
+                                data-type="${payment.paymentType}"
+                                ${payment.templateId ? `data-template-id="${payment.templateId}"` : ''}>
                             Удалить
                         </button>
                     `;
                     container.appendChild(paymentEl);
                 });
-                
+
+                // Добавляем обработчики для кнопок удаления
                 document.querySelectorAll('.delete-btn').forEach(btn => {
                     btn.addEventListener('click', async function() {
-                        const paymentId = this.dataset.id;
                         try {
-                            await deleteDoc(doc(db, "payments", paymentId));
-                            // Удаляем строку из интерфейса
+                            const paymentId = this.dataset.id;
+                            const paymentType = this.dataset.type;
+                            const templateId = this.dataset.templateId;
+
+                            if (paymentType === 'recurring') {
+                                if (templateId) {
+                                    // Удаляем конкретный экземпляр повторяющегося платежа
+                                    const templateRef = doc(db, `payments/recurring/items/${templateId}`);
+                                    const instanceRef = doc(templateRef, `instances/${paymentId}`);
+                                    await deleteDoc(instanceRef);
+                                } else {
+                                    // Удаляем весь шаблон повторяющегося платежа
+                                    const recurringRef = doc(db, `payments/recurring/items/${paymentId}`);
+                                    await deleteDoc(recurringRef);
+                                }
+                            } else {
+                                // Удаляем разовый платеж
+                                const oneTimeRef = doc(db, `payments/one_time/items/${paymentId}`);
+                                await deleteDoc(oneTimeRef);
+                            }
+
+                            // Удаляем элемент из интерфейса
                             const paymentItem = this.closest('.payment-item');
                             paymentItem.remove();
-                            
+
                             // Если платежей больше нет, показываем сообщение
                             if (container.children.length === 0) {
                                 container.innerHTML = '<p class="text-gray-500 text-center py-4">Нет платежей для удаления</p>';
                             }
                         } catch (error) {
                             console.error("Error deleting payment: ", error);
-                            alert("Ошибка при удалении платежа");
+                            alert("Ошибка при удалении платежа: " + error.message);
                         }
                     });
                 });
@@ -758,22 +926,91 @@
             container.innerHTML = '';
             
             const dateString = formatDate(selectedDate);
-            const payments = paymentsData[dateString] || [];
             
-            if (payments.length === 0) {
+            // Получаем обычные платежи для выбранной даты
+            const regularPayments = paymentsData[dateString] || [];
+            
+            // Получаем повторяющиеся платежи из предыдущих месяцев
+            const recurringPayments = [];
+            Object.entries(paymentsData).forEach(([paymentDateString, payments]) => {
+                const paymentDate = new Date(paymentDateString);
+                payments.forEach(payment => {
+                    if (payment.paymentType === 'recurring') {
+                        // Получаем день месяца из оригинального платежа
+                        const paymentDay = paymentDate.getDate();
+                        
+                        // Если день совпадает с выбранной датой и это не тот же самый месяц
+                        if (paymentDay === selectedDate.getDate() && 
+                            (paymentDate.getMonth() !== selectedDate.getMonth() || 
+                             paymentDate.getFullYear() !== selectedDate.getFullYear())) {
+                            
+                            // Проверяем, что выбранная дата не раньше начальной даты платежа
+                            if (selectedDate >= paymentDate) {
+                                // Проверяем, не добавлен ли уже этот платеж
+                                const isAlreadyAdded = regularPayments.some(p => 
+                                    p.id === payment.id && p.paymentType === 'recurring'
+                                );
+                                
+                                if (!isAlreadyAdded) {
+                                    recurringPayments.push({
+                                        ...payment,
+                                        originalDate: paymentDate,
+                                        isRecurring: true
+                                    });
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+            
+            const allPayments = [...regularPayments, ...recurringPayments];
+            
+            if (allPayments.length === 0) {
                 container.innerHTML = '<p class="text-gray-500 text-center py-4">Нет платежей для отображения</p>';
             } else {
-                payments.forEach(payment => {
+                // Сортируем платежи: сначала разовые, потом повторяющиеся
+                allPayments.sort((a, b) => {
+                    if (a.paymentType === b.paymentType) {
+                        return 0;
+                    }
+                    return a.paymentType === 'one-time' ? -1 : 1;
+                });
+
+                allPayments.forEach(payment => {
                     const paymentEl = document.createElement('div');
                     paymentEl.className = 'payment-item';
+                    
+                    const isRecurring = payment.paymentType === 'recurring';
+                    
                     paymentEl.innerHTML = `
                         <div class="w-full">
-                            <div class="font-medium">${payment.amount} ₽ <span class="text-xs ${payment.paymentType === 'recurring' ? 'text-green-600' : 'text-red-600'}">(${payment.paymentType === 'recurring' ? 'постоянный' : 'разовый'})</span></div>
-                            ${payment.description ? `<div class="text-sm text-gray-600 mt-1">${payment.description}</div>` : ''}
+                            <div class="font-medium flex justify-between items-center">
+                                <span>${payment.amount.toLocaleString()}</span>
+                                <span class="text-xs px-2 py-1 rounded ${isRecurring ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                                    ${isRecurring ? 'постоянный' : 'разовый'}
+                                </span>
+                            </div>
+                            ${payment.description ? `
+                                <div class="text-sm text-gray-600 mt-1">
+                                    ${payment.description}
+                                </div>
+                            ` : ''}
                         </div>
                     `;
                     container.appendChild(paymentEl);
                 });
+
+                // Добавляем итоговую сумму
+                const totalAmount = allPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+                const totalEl = document.createElement('div');
+                totalEl.className = 'mt-4 pt-4 border-t border-gray-200';
+                totalEl.innerHTML = `
+                    <div class="font-bold text-right">
+                        Итого: ${totalAmount.toLocaleString()}
+                    </div>
+                `;
+                container.appendChild(totalEl);
             }
             
             document.getElementById('paymentsDescriptionList').classList.remove('hidden');
@@ -915,6 +1152,135 @@
                 hideOverlay();
             }
         });
+
+        // Обработчик для кнопки детализации платежей
+        document.getElementById('showPaymentDetailsBtn').addEventListener('click', function() {
+            const detailsList = document.getElementById('paymentDetailsList');
+            const isHidden = detailsList.classList.contains('hidden');
+            
+            if (isHidden) {
+                // Показываем детали
+                detailsList.classList.remove('hidden');
+                updatePaymentDetails();
+            } else {
+                // Скрываем детали
+                detailsList.classList.add('hidden');
+            }
+        });
+
+        // Функция для обновления деталей платежей
+        function updatePaymentDetails() {
+            console.log('Updating payment details for month:', months[currentMonth], currentYear);
+            
+            // Контейнеры для списков платежей
+            const oneTimeContainer = document.getElementById('oneTimePaymentsList');
+            const recurringContainer = document.getElementById('recurringPaymentsList');
+            
+            // Очищаем контейнеры
+            oneTimeContainer.innerHTML = '';
+            recurringContainer.innerHTML = '';
+            
+            // Переменные для подсчета сумм
+            let oneTimeTotal = 0;
+            let recurringTotal = 0;
+            
+            // Временные данные для месяца
+            const monthPaymentsData = {};
+            
+            // Копируем существующие платежи для текущего месяца
+            Object.entries(paymentsData).forEach(([dateString, payments]) => {
+                const paymentDate = new Date(dateString);
+                if (paymentDate.getMonth() === currentMonth && paymentDate.getFullYear() === currentYear) {
+                    monthPaymentsData[dateString] = [...payments];
+                }
+            });
+            
+            // Добавляем повторяющиеся платежи для отображения
+            Object.entries(paymentsData).forEach(([dateString, payments]) => {
+                payments.forEach(payment => {
+                    if (payment.paymentType === 'recurring') {
+                        const paymentDate = new Date(dateString);
+                        const paymentDay = paymentDate.getDate();
+                        
+                        // Создаем дату для текущего месяца с тем же днем
+                        const newDate = new Date(currentYear, currentMonth, paymentDay);
+                        
+                        // Проверяем валидность даты
+                        if (!isNaN(newDate.getTime())) {
+                            const newDateString = formatDate(newDate);
+                            
+                            if (!monthPaymentsData[newDateString]) {
+                                monthPaymentsData[newDateString] = [];
+                            }
+                            
+                            // Проверяем, не существует ли уже такой платеж
+                            const existingPayment = monthPaymentsData[newDateString].some(p => 
+                                p.id === payment.id && p.paymentType === 'recurring'
+                            );
+                            
+                            if (!existingPayment) {
+                                monthPaymentsData[newDateString].push({
+                                    ...payment,
+                                    amount: Number(payment.amount) || 0,
+                                    isRecurring: true
+                                });
+                            }
+                        }
+                    }
+                });
+            });
+            
+            // Обрабатываем платежи для отображения
+            Object.entries(monthPaymentsData).forEach(([dateString, payments]) => {
+                payments.forEach(payment => {
+                    const amount = Number(payment.amount) || 0;
+                    const day = new Date(dateString).getDate();
+                    
+                    if (payment.paymentType === 'one-time') {
+                        // Разовый платеж
+                        oneTimeTotal += amount;
+                        
+                        const paymentItem = document.createElement('div');
+                        paymentItem.className = 'payment-details-item';
+                        paymentItem.innerHTML = `
+                            <span>${day} ${months[currentMonth].toLowerCase()}: ${payment.description || 'Платеж'}</span>
+                            <span>${amount.toLocaleString()}</span>
+                        `;
+                        oneTimeContainer.appendChild(paymentItem);
+                    } else {
+                        // Повторяющийся платеж
+                        recurringTotal += amount;
+                        
+                        const paymentItem = document.createElement('div');
+                        paymentItem.className = 'payment-details-item';
+                        paymentItem.innerHTML = `
+                            <span>${day} ${months[currentMonth].toLowerCase()}: ${payment.description || 'Платеж'}</span>
+                            <span>${amount.toLocaleString()}</span>
+                        `;
+                        recurringContainer.appendChild(paymentItem);
+                    }
+                });
+            });
+            
+            // Добавляем итоговые суммы
+            if (oneTimeContainer.children.length === 0) {
+                oneTimeContainer.innerHTML = '<p class="text-blue-700 font-bold">0</p>';
+            } else {
+                const totalEl = document.createElement('div');
+                totalEl.className = 'payment-details-total';
+                totalEl.innerHTML = `Итого: ${oneTimeTotal.toLocaleString()}`;
+                oneTimeContainer.appendChild(totalEl);
+            }
+            
+            if (recurringContainer.children.length === 0) {
+                recurringContainer.innerHTML = '<p class="text-green-700 font-bold">0</p>';
+            } else {
+                const totalEl = document.createElement('div');
+                totalEl.className = 'payment-details-total';
+                totalEl.innerHTML = `Итого: ${recurringTotal.toLocaleString()}`;
+                recurringContainer.appendChild(totalEl);
+            }
+        }
     </script>
 </body>
 </html>
